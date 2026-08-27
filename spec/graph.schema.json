@@ -1,0 +1,211 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://packsmith.dev/spec/graph.schema.json",
+  "title": "Packsmith graph",
+  "description": "The semantic half of a project: what the user wired together. Covers graph.json only. Node positions, collapsed state and colours live in layout.json, are never read by the compiler and never reach the build hash (ADR-0013). Order is expressed by containment in ordered slots, never by coordinates and never by edges (ADR-0016). Nothing here is executable: no expressions, no interpolation, no references written inside strings (ADR-0003).",
+  "type": "object",
+  "required": ["version", "project", "root"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "description": "Major version of the graph format. Additive changes keep this number; a breaking change bumps it and carries a migration note in spec/CHANGELOG.md.",
+      "type": "integer",
+      "const": 0
+    },
+    "project": { "$ref": "#/$defs/project" },
+    "root": {
+      "description": "The graph's own top-level slot: the ordered list of statement nodes that make up the project. A statement at index i of this slot has the address (null, \"root\", i).",
+      "$ref": "#/$defs/statement-list"
+    },
+    "edges": {
+      "description": "Data edges. An edge carries a value from an output port of a value node to an input port of any node, and carries no ordering meaning whatsoever (spec/types.md section 1). Constraints a JSON Schema cannot express, checked by the compiler: the target port MUST NOT also hold a literal; both endpoints MUST name nodes present in this graph; the source MUST be a value node; the types MUST be assignable (spec/types.md section 5); the edge MUST NOT leave the slot that a slot-scoped output is visible in; and the data dependencies MUST be acyclic.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/edge" },
+      "default": []
+    }
+  },
+  "$defs": {
+    "project": {
+      "description": "Project metadata. The build target is not here: it is a compile parameter, never a property of the graph (ADR-0006).",
+      "type": "object",
+      "required": ["name", "namespace"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "description": "Human-readable project name. Not an identifier; never appears in emitted paths.",
+          "type": "string",
+          "minLength": 1
+        },
+        "namespace": {
+          "description": "Default namespace for ids the project defines, for example \"example\" in \"example:tick\". Lower-case identifier characters only.",
+          "type": "string",
+          "pattern": "^[a-z0-9_.-]+$"
+        },
+        "description": {
+          "description": "Pack description shown in the game's pack list. A text literal (spec/types.md section 4.8).",
+          "$ref": "#/$defs/literal-text"
+        }
+      }
+    },
+    "node": {
+      "description": "One instance of a block. A node is a statement node or a value node, decided by its block manifest, never both. Its id is unique across the whole graph.",
+      "type": "object",
+      "required": ["id", "block"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/node-id" },
+        "block": { "$ref": "#/$defs/block-ref" },
+        "inputs": {
+          "description": "Literal values by input port name. A port holds a literal or an edge, never both, and never neither unless the port is optional (spec/types.md section 6). An optional port with neither uses the default declared in the block manifest. Port names and their types come from the manifest; this schema constrains only the shape of a literal.",
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/port-name" },
+          "additionalProperties": { "$ref": "#/$defs/literal" },
+          "default": {}
+        },
+        "slots": {
+          "description": "Named ordered collections of child statement nodes, by slot name. Slots are the only expression of order, and the only place the body type appears. Present only on nodes whose manifest declares slots. An empty slot is a valid, silent program, not an error.",
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/port-name" },
+          "additionalProperties": { "$ref": "#/$defs/statement-list" },
+          "default": {}
+        }
+      }
+    },
+    "statement-list": {
+      "description": "The value of a slot: child statement nodes in execution order. Index order is execution order; nothing else expresses order. Each child appears in exactly one slot at exactly one index, so a dangling statement, a statement with two predecessors and a cycle in execution are all unrepresentable. A child that is a value node MUST be rejected with a diagnostic naming the slot and the index.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/node" }
+    },
+    "node-id": {
+      "description": "Identifier of a node, unique across the graph. Opaque to the compiler; it appears verbatim in diagnostics, so an editor should keep it stable across edits.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "port-name": {
+      "description": "Name of an input port, output port or slot, as declared in the block manifest.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "maxLength": 64
+    },
+    "block-ref": {
+      "description": "A block, addressed as namespace/name@version with an exact semantic version. Ranges are for target compatibility only, never for block references.",
+      "type": "string",
+      "pattern": "^[a-z0-9_.-]+/[a-z0-9_.-]+@[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+    },
+    "edge": {
+      "type": "object",
+      "required": ["from", "to"],
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "description": "The output port the value comes from. Its node must be a value node.",
+          "$ref": "#/$defs/port-address"
+        },
+        "to": {
+          "description": "The input port the value goes to.",
+          "$ref": "#/$defs/port-address"
+        }
+      }
+    },
+    "port-address": {
+      "type": "object",
+      "required": ["node", "port"],
+      "additionalProperties": false,
+      "properties": {
+        "node": { "$ref": "#/$defs/node-id" },
+        "port": { "$ref": "#/$defs/port-name" }
+      }
+    },
+
+    "literal": {
+      "description": "A literal value on an input port. Which of these forms is valid on a given port is decided by that port's declared type in the block manifest, and is checked by the compiler, not by this schema. There are ten literal forms, one per value type; the eleventh type, body, has no literal because it appears only as a slot. Object key order is not significant and is canonicalised before hashing; array order always is (spec/types.md section 6).",
+      "anyOf": [
+        { "$ref": "#/$defs/literal-bool" },
+        { "$ref": "#/$defs/literal-int" },
+        { "$ref": "#/$defs/literal-float" },
+        { "$ref": "#/$defs/literal-string" },
+        { "$ref": "#/$defs/literal-id" },
+        { "$ref": "#/$defs/literal-block-state" },
+        { "$ref": "#/$defs/literal-item-stack" },
+        { "$ref": "#/$defs/literal-text" },
+        { "$ref": "#/$defs/literal-list" },
+        { "$ref": "#/$defs/literal-enum" }
+      ]
+    },
+    "literal-bool": {
+      "description": "Literal of type bool.",
+      "type": "boolean"
+    },
+    "literal-int": {
+      "description": "Literal of type int. Bounds are declared per port; outside a declared bound, the signed 32-bit range applies.",
+      "type": "integer"
+    },
+    "literal-float": {
+      "description": "Literal of type float. Finite by construction: JSON cannot spell NaN or the infinities, and no other spelling is accepted. Negative zero is normalised to zero before it reaches the output.",
+      "type": "number"
+    },
+    "literal-string": {
+      "description": "Literal of type string. The port's format parameter (plain, command, selector, or any other format the target data defines) decides how it is validated; a format the target does not define is a \"not supported for this target\" diagnostic, not a parse error. A command carries no leading slash.",
+      "type": "string"
+    },
+    "literal-id": {
+      "description": "Literal of type id: a namespaced resource identifier such as \"minecraft:diamond\", or, where the port sets allow_tag, a tag reference such as \"#minecraft:planks\". A value without a namespace is rejected rather than defaulted.",
+      "type": "string",
+      "pattern": "^#?[a-z0-9_.-]+:[a-z0-9_./-]+$"
+    },
+    "literal-block-state": {
+      "description": "Literal of type block_state: a block, optionally with some of its properties pinned. Properties may be partial; an absent property means \"any\" in a test context and \"the block's default\" in a placement context, and the consuming block's documentation says which.",
+      "type": "object",
+      "required": ["block"],
+      "additionalProperties": false,
+      "properties": {
+        "block": { "$ref": "#/$defs/literal-id" },
+        "properties": {
+          "description": "Property names and values for this specific block, checked against the extracted block data. Values are strings, including \"true\" and \"5\", because that is how the game writes them.",
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+    "literal-item-stack": {
+      "description": "Literal of type item_stack: some quantity of an item, optionally with components.",
+      "type": "object",
+      "required": ["item"],
+      "additionalProperties": false,
+      "properties": {
+        "item": { "$ref": "#/$defs/literal-id" },
+        "count": {
+          "description": "Defaults to 1. No upper bound is checked: the maximum stack size is itself a component default, and component defaults are not in the extracted subset (ADR-0014).",
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        },
+        "components": {
+          "description": "Data components by component type id. Each key must be a syntactically valid id present in the target's data component type registry; the value is passed through unvalidated. This is the one deliberate hole where a mistake reaches the game instead of the editor.",
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/literal-id" },
+          "default": {}
+        }
+      }
+    },
+    "literal-text": {
+      "description": "Literal of type text: a text component, in any of the shapes the target accepts - a bare string, an array of components, or an object carrying exactly one content field the target recognises. Validation is shape only: style keys are not exhaustively checked and translation keys are not resolved.",
+      "anyOf": [
+        { "type": "string" },
+        { "type": "object" },
+        { "type": "array", "items": { "$ref": "#/$defs/literal-text" } }
+      ]
+    },
+    "literal-list": {
+      "description": "Literal of type list: an ordered, homogeneous collection of element literals. Not a sequence of statements; statements live in slots. Order is preserved exactly as written and is never sorted by the compiler, because a list is often a priority order.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/literal" }
+    },
+    "literal-enum": {
+      "description": "Literal of type enum: one of the choices the block author declared on that port. An enum is a per-port authoring convenience and never a taxonomy of the game; registry categories, pack kinds, registry contents and block property values are id or block_state, validated against target data (ADR-0010).",
+      "type": "string"
+    }
+  }
+}

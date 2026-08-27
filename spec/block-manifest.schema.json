@@ -1,0 +1,343 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://packsmith.dev/spec/block-manifest.schema.json",
+  "title": "Packsmith block manifest",
+  "description": "A block's self-description: id, version, licence, ports, slots, supported target range, and how it is implemented. One schema for both tiers - a declarative block is a manifest plus a template, a computed block is a manifest plus a sandboxed WebAssembly component or OCI artifact (ADR-0004). A computed block returns this same document from describe() (spec/wit/packsmith-block.wit).",
+  "type": "object",
+  "required": ["version", "id", "block_version", "license", "node_kind", "targets", "implementation"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "description": "Major version of the manifest format. Additive changes keep this number; a breaking change bumps it and carries a migration note in spec/CHANGELOG.md.",
+      "type": "integer",
+      "const": 0
+    },
+    "id": {
+      "description": "The block's identity as namespace/name. With block_version this forms the namespace/name@version address that a graph refers to.",
+      "type": "string",
+      "pattern": "^[a-z0-9_.-]+/[a-z0-9_.-]+$"
+    },
+    "block_version": {
+      "description": "The block's own semantic version. Graphs pin an exact version; a lockfile records what was resolved.",
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+    },
+    "license": {
+      "description": "SPDX licence expression for this block, for example \"MIT\", \"Apache-2.0 OR MIT\", \"AGPL-3.0-or-later\". Required: a block is redistributed by the registry and installed into other people's projects, so an unlicensed block is not publishable.",
+      "type": "string",
+      "minLength": 1
+    },
+    "title": {
+      "description": "Short label shown in the editor's block palette, in the user's own words rather than in file terms (ADR-0009). Defaults to the name part of the id.",
+      "type": "string"
+    },
+    "summary": {
+      "description": "One sentence describing what this block does, phrased in game terms first.",
+      "type": "string"
+    },
+    "node_kind": {
+      "description": "Whether instances of this block are statement nodes, which do something in order and produce no value, or value nodes, which produce values and do nothing in order. A block is exactly one; there is no third kind and no node that is both (spec/types.md section 1).",
+      "enum": ["statement", "value"]
+    },
+    "targets": { "$ref": "#/$defs/target-range" },
+    "inputs": {
+      "description": "Input ports by name. Each holds a literal or a data edge, never both, and never neither unless it is optional.",
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/port-name" },
+      "additionalProperties": { "$ref": "#/$defs/input-port" },
+      "default": {}
+    },
+    "outputs": {
+      "description": "Output ports by name. Present only on value nodes; a statement node declaring outputs is a manifest error.",
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/port-name" },
+      "additionalProperties": { "$ref": "#/$defs/output-port" },
+      "default": {}
+    },
+    "slots": {
+      "description": "Slots by name, in the order the editor should show them. A slot holds an ordered array of child statement nodes and is the only expression of order in a graph (ADR-0016).",
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/port-name" },
+      "additionalProperties": { "$ref": "#/$defs/slot" },
+      "default": {}
+    },
+    "implementation": { "$ref": "#/$defs/implementation" }
+  },
+  "$defs": {
+    "port-name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "maxLength": 64
+    },
+    "target-range": {
+      "description": "The range of Minecraft targets this block supports. The compiler refuses to build when the requested target falls outside the intersection of the ranges of the blocks in use, and says which block is responsible (ADR-0006). Version strings are compared by the version table, which accepts both the 1.x.y and the year-based shapes; they are never parsed by pattern here.",
+      "type": "object",
+      "required": ["min"],
+      "additionalProperties": false,
+      "properties": {
+        "min": {
+          "description": "Oldest supported target, inclusive.",
+          "type": "string",
+          "minLength": 1
+        },
+        "max": {
+          "description": "Newest supported target, inclusive. Absent means \"no known upper bound\"; the compiler still warns when building against a target newer than any the block was tested on.",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "input-port": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "$ref": "#/$defs/type" },
+        "label": {
+          "description": "What the editor calls this port. Game words, not field names.",
+          "type": "string"
+        },
+        "help": {
+          "description": "One or two sentences shown alongside the port.",
+          "type": "string"
+        },
+        "optional": {
+          "description": "When true, the port may hold neither a literal nor an edge, and the value is then the declared default. There is no nullable type and no option type: optionality is a property of the port (spec/types.md section 3).",
+          "type": "boolean",
+          "default": false
+        },
+        "default": {
+          "description": "The value used when an optional port is left empty. Must be a valid literal of this port's type."
+        }
+      }
+    },
+    "output-port": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "$ref": "#/$defs/type" },
+        "label": { "type": "string" },
+        "help": { "type": "string" },
+        "slot": {
+          "description": "Names one of this block's slots to scope the output to, for example the current entity inside an \"as each\" wrapper. A slot-scoped output is visible only to nodes inside that slot, at any depth; an edge referencing it from outside is rejected. Absent means the output is visible wherever the node is (spec/types.md section 2.4).",
+          "$ref": "#/$defs/port-name"
+        }
+      }
+    },
+    "slot": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "description": "Always body. It is the only type that appears on a slot, and a slot is the only place it appears.",
+          "$ref": "#/$defs/type-body"
+        },
+        "label": { "type": "string" },
+        "help": { "type": "string" }
+      }
+    },
+
+    "type": {
+      "description": "A type reference: an object naming one of the eleven types of spec/types.md, plus that type's parameters. There are no type variables, no unions, no user-defined named types and no nullability. Adding a twelfth type is an amendment to ADR-0016, not a schema edit.",
+      "oneOf": [
+        { "$ref": "#/$defs/type-bool" },
+        { "$ref": "#/$defs/type-int" },
+        { "$ref": "#/$defs/type-float" },
+        { "$ref": "#/$defs/type-string" },
+        { "$ref": "#/$defs/type-id" },
+        { "$ref": "#/$defs/type-block-state" },
+        { "$ref": "#/$defs/type-item-stack" },
+        { "$ref": "#/$defs/type-text" },
+        { "$ref": "#/$defs/type-list" },
+        { "$ref": "#/$defs/type-enum" },
+        { "$ref": "#/$defs/type-body" }
+      ]
+    },
+    "type-bool": {
+      "description": "Yes or no. Shown as a checkbox or a labelled toggle, never as the words true and false on their own.",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": { "type": { "const": "bool" } }
+    },
+    "type-int": {
+      "description": "A whole number. Connects to int, and widens to float.",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "int" },
+        "min": { "description": "Inclusive lower bound. Outside a declared bound the signed 32-bit range applies, because that is what most game fields hold.", "type": "integer" },
+        "max": { "description": "Inclusive upper bound.", "type": "integer" }
+      }
+    },
+    "type-float": {
+      "description": "A number that may have a fractional part. Prefer int where the game field is integral: every float is a place where two implementations can disagree about the last digit.",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "float" },
+        "min": { "description": "Inclusive lower bound.", "type": "number" },
+        "max": { "description": "Inclusive upper bound.", "type": "number" }
+      }
+    },
+    "type-string": {
+      "description": "Text. There is no separate command type and no separate selector type: both are string with a format, validated by the target's command grammar (ADR-0012, ADR-0016).",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "string" },
+        "format": {
+          "description": "Names the validator to apply. The set of formats is open and supplied by target data, exactly as registry categories are (ADR-0010); a format the target does not define is a \"not supported for this target\" diagnostic, not a parse error. v1 target data defines \"plain\" (length only), \"command\" (one command line, no leading slash) and \"selector\" (an entity selector).",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "default": "plain"
+        },
+        "max_length": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "type-id": {
+      "description": "A namespaced resource identifier - minecraft:diamond, example:my_function. The type that carries almost all of a data pack's meaning. A value without a namespace is rejected rather than defaulted: silently assuming minecraft: teaches nothing and breaks the moment the user publishes.",
+      "type": "object",
+      "required": ["type", "registry"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "id" },
+        "registry": {
+          "description": "A namespaced registry key such as minecraft:item or minecraft:function, looked up in target data. A string, never an enum, here or in any implementation (ADR-0010). Where the target data carries a member list, membership is checked and an unknown member gets near-miss suggestions; where it does not - the normal case for ids the pack itself defines - only syntax is checked.",
+          "type": "string",
+          "pattern": "^[a-z0-9_.-]+:[a-z0-9_./-]+$"
+        },
+        "allow_tag": {
+          "description": "When true, the value may instead be a tag reference written with a leading #, checked against the tag registry corresponding to registry. An id port with allow_tag false connects to one with allow_tag true; the reverse is rejected.",
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "type-block-state": {
+      "description": "A block, optionally with some of its properties pinned. An id of registry minecraft:block does not connect to it: the two mean different things in a test context, so the conversion is a block, not a coercion.",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": { "type": { "const": "block_state" } }
+    },
+    "type-item-stack": {
+      "description": "Some quantity of an item, optionally with components. An id of registry minecraft:item does not connect to it, for the same reason as block_state.",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": { "type": { "const": "item_stack" } }
+    },
+    "type-text": {
+      "description": "A text component: the structured, translatable, styled text the game shows to players. A string of format plain connects to it and means a literal, unstyled, untranslated run of text.",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": { "type": { "const": "text" } }
+    },
+    "type-list": {
+      "description": "An ordered, homogeneous collection of values. Not a sequence of statements; statements live in slots. List types are invariant: list<int> does not connect to list<float>, even though int connects to float.",
+      "type": "object",
+      "required": ["type", "of"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "list" },
+        "of": {
+          "description": "The element type. Must not be body, which never appears on a port.",
+          "$ref": "#/$defs/type"
+        },
+        "min_items": { "type": "integer", "minimum": 0 },
+        "max_items": { "type": "integer", "minimum": 0 },
+        "unique": {
+          "description": "When true, elements must be distinct, compared in canonical form.",
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "type-enum": {
+      "description": "A choice from a fixed set the block author declares - a comparison operator, a sort direction. A per-port authoring convenience, never a taxonomy of the game: an enum whose choices are game concepts is a bug, and should be id or block_state validated against target data (ADR-0010). Connects only to an enum with the identical choices in the identical order.",
+      "type": "object",
+      "required": ["type", "choices"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "enum" },
+        "choices": {
+          "description": "Distinct ASCII strings, at least one. A non-member value is a diagnostic listing them all; the set is small by construction, so nothing is truncated.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[\\x20-\\x7e]+$" }
+        },
+        "labels": {
+          "description": "Display label per choice, for the editor. Keys are choices. Labels are metadata, not part of the type: two enums with the same choices and different labels are the same type.",
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+    "type-body": {
+      "description": "The sequencing type. Appears only as the type of a slot, holds an ordered array of child statement nodes, has no parameters in v1, is not connectable, and never participates in a data edge. There is deliberately no way to restrict which statement blocks a slot accepts: that would need a taxonomy of statements we do not have and do not want, so a block that cannot meaningfully appear somewhere reports it during lowering.",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": { "type": { "const": "body" } }
+    },
+
+    "implementation": {
+      "description": "How this block produces IR. Tagged, so the two tiers share one manifest and a third transport can be added without a break.",
+      "oneOf": [
+        {
+          "description": "A declarative block: a manifest plus a template. No code, no runtime, no sandbox. The default and the majority case (ADR-0004).",
+          "type": "object",
+          "required": ["kind", "template"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "declarative" },
+            "template": {
+              "description": "Path, relative to the manifest, of the template that expands to IR. The template language is defined by the compiler and is data, not code (ADR-0003).",
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        {
+          "description": "A computed block: code executed in a sandbox, returning an IR patch and never files (ADR-0005). Phase 3.",
+          "type": "object",
+          "required": ["kind", "artifact"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "computed" },
+            "artifact": {
+              "description": "The sandboxed artifact implementing spec/wit/packsmith-block.wit.",
+              "type": "object",
+              "required": ["transport", "reference", "sha256"],
+              "additionalProperties": false,
+              "properties": {
+                "transport": {
+                  "description": "How the host runs it: as a WebAssembly component, or through the OCI runner that speaks the same contract over stdin and stdout for languages whose WASM path is not viable (ADR-0005).",
+                  "enum": ["wasm-component", "oci"]
+                },
+                "reference": {
+                  "description": "Path relative to the manifest for a wasm-component, or an image reference for oci.",
+                  "type": "string",
+                  "minLength": 1
+                },
+                "sha256": {
+                  "description": "Content hash of the artifact, lower-case hex. Blocks are untrusted and content-addressed: the host refuses an artifact whose hash does not match.",
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

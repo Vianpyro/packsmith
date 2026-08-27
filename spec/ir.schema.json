@@ -1,0 +1,169 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://packsmith.dev/spec/ir.schema.json",
+  "title": "Packsmith IR",
+  "description": "The normalized, target-resolved description of what a build produces, one level above the file tree. Produced by the compiler, consumed by the emitter, and returned in patch form by computed blocks. Data only, never code (ADR-0003). The emitter is the only component that knows directory names and file extensions; nothing here names a path. The set of pack kinds and the set of resource categories are open and supplied by target data, so worldgen and resource packs are reachable by adding data rather than by redesigning this document (ADR-0010).",
+  "type": "object",
+  "required": ["version", "target", "packs"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "description": "Major version of the IR format. Additive changes keep this number; a breaking change bumps it and carries a migration note in spec/CHANGELOG.md.",
+      "type": "integer",
+      "const": 0
+    },
+    "target": { "$ref": "#/$defs/target" },
+    "packs": {
+      "description": "The packs this build produces. v1 emits exactly one, of kind \"data\". The list shape exists from the first schema version so that a second output is a scope decision, not an architecture change.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/pack" }
+    }
+  },
+  "$defs": {
+    "target": {
+      "description": "The resolved build target. Present so that an IR document is self-describing and a build is reproducible from it alone. Format numbers are not here: they are target data, read by the emitter from the version table, never carried as constants (ADR-0006, ADR-0014).",
+      "type": "object",
+      "required": ["id"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "description": "The Minecraft: Java Edition release this build is aimed at, as written on the command line, for example \"26.2\" or \"1.21.9\".",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "pack": {
+      "type": "object",
+      "required": ["kind", "resources"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "description": "What kind of pack this is, for example \"data\" or \"resource\". An open string looked up in target data, which supplies the root directory and the format number to use. Deliberately not an enum, in this schema or anywhere else; an unknown kind is a \"not supported for this target\" diagnostic, not a parse error.",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "description": {
+          "description": "The pack description shown in the game's pack list, as a text component.",
+          "$ref": "#/$defs/text"
+        },
+        "resources": {
+          "description": "Everything this pack contains. Order in this array is not significant: the emitter sorts by (category, id) before writing, so that the same inputs produce a byte-identical zip (ADR-0007). Two resources with the same category and id are a conflict diagnostic naming both origins.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/resource" }
+        }
+      }
+    },
+    "resource": {
+      "description": "One thing a pack contains: a function, a tag, a recipe, and so on.",
+      "type": "object",
+      "required": ["category", "id", "origin", "body"],
+      "additionalProperties": false,
+      "properties": {
+        "category": {
+          "description": "The registry category, as a slash-separated string: \"function\", \"tags/function\", \"worldgen/biome\". The compiler does not enumerate categories; it looks each one up in the target data table, which supplies the directory path, the file extension and the schema to validate the body against. There is no enum of categories here or in any implementation (ADR-0010).",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*(/[a-z][a-z0-9_]*)*$"
+        },
+        "id": {
+          "description": "The namespaced id of this resource, for example \"example:tick\". Together with the category it decides the emitted path, via target data.",
+          "type": "string",
+          "pattern": "^[a-z0-9_.-]+:[a-z0-9_./-]+$"
+        },
+        "origin": {
+          "description": "Where in the graph this resource came from. Every resource carries one, so that a diagnostic about it can name the block the user placed before it names the file the result landed in (ADR-0009).",
+          "$ref": "#/$defs/statement-address"
+        },
+        "body": { "$ref": "#/$defs/body" }
+      }
+    },
+    "statement-address": {
+      "description": "The stable address of a statement: node id, slot name, index. This is the anchor for every diagnostic about a function body (ADR-0016).",
+      "type": "object",
+      "required": ["node", "slot", "index"],
+      "additionalProperties": false,
+      "properties": {
+        "node": {
+          "description": "Id of the node owning the slot, or null when the statement sits in the graph's own top-level \"root\" slot.",
+          "type": ["string", "null"]
+        },
+        "slot": {
+          "description": "Name of the slot the statement sits in.",
+          "type": "string"
+        },
+        "index": {
+          "description": "Zero-based index of the statement within that slot. Index order is execution order.",
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "body": {
+      "description": "The content of a resource, as a tagged form. New forms are added as further variants without a breaking change; in particular a structured command form can join \"commands\" later, which is why commands are tagged rather than bare strings (ADR-0012).",
+      "type": "object",
+      "required": ["form"],
+      "oneOf": [
+        { "$ref": "#/$defs/body-commands" },
+        { "$ref": "#/$defs/body-json" }
+      ]
+    },
+    "body-commands": {
+      "description": "An ordered list of statements for a command-carrying resource, such as a function. Order is significant and is exactly the order of the slot it was lowered from.",
+      "type": "object",
+      "required": ["form", "statements"],
+      "additionalProperties": false,
+      "properties": {
+        "form": { "const": "commands" },
+        "statements": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/command" }
+        }
+      }
+    },
+    "body-json": {
+      "description": "A JSON document for a resource the game reads as JSON: a tag, a recipe, a loot table, an advancement, a predicate, an item modifier. The value is validated against the schema that the target data table names for the resource's category, not by this schema.",
+      "type": "object",
+      "required": ["form", "value"],
+      "additionalProperties": false,
+      "properties": {
+        "form": { "const": "json" },
+        "value": {
+          "description": "The document itself. Object key order is not significant and is canonicalised before the document is written or hashed; array order always is.",
+          "type": ["object", "array"]
+        }
+      }
+    },
+    "command": {
+      "description": "One command line, as a tagged form. \"text\" is the only form in v1: the command is text, validated against the target's command grammar, with provenance (ADR-0012). A structured form is a second variant of this same tag when it is worth building.",
+      "type": "object",
+      "required": ["form"],
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["form", "command", "origin"],
+          "additionalProperties": false,
+          "properties": {
+            "form": { "const": "text" },
+            "command": {
+              "description": "One command line with no leading slash and no newline. Validated against the Brigadier command tree extracted for the requested target.",
+              "type": "string",
+              "pattern": "^[^/\\n][^\\n]*$"
+            },
+            "origin": {
+              "description": "The statement this line came from. Several lines may share one origin, because one statement may lower to several lines.",
+              "$ref": "#/$defs/statement-address"
+            }
+          }
+        }
+      ]
+    },
+    "text": {
+      "description": "A text component: a bare string, an array of components, or an object carrying exactly one content field the target recognises. Shape only; style keys are not exhaustively checked and translation keys are not resolved.",
+      "anyOf": [
+        { "type": "string" },
+        { "type": "object" },
+        { "type": "array", "items": { "$ref": "#/$defs/text" } }
+      ]
+    }
+  }
+}

@@ -1,0 +1,154 @@
+// The computed-block contract (ADR-0005). Written in Phase 0 so that the IR is designed
+// against it; not implemented until Phase 3.
+//
+// A block is a pure function. The host grants no filesystem, no network, no clock and no
+// ambient randomness, and enforces a fuel limit, a memory limit, a wall-clock timeout and an
+// output-size limit. A block returns IR nodes, never files.
+//
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
+package packsmith:block@0.1.0;
+
+/// Values as they cross the sandbox boundary. One case per value type in spec/types.md;
+/// `body` has no case here because a slot is not a value and never reaches a port.
+interface values {
+    /// A JSON document in canonical form: object keys sorted, integers without a decimal
+    /// point, floats by shortest round-trip, no negative zero (ADR-0007). Used only where
+    /// the type system deliberately stops - text components, data component values and the
+    /// bodies of JSON resources - so that the hole is visible in the ABI rather than hidden
+    /// behind a permissive record.
+    type json = string;
+
+    /// A namespaced identifier, or a tag reference with a leading `#` where the port allows
+    /// one. Always carries its namespace: an unqualified id never reaches a block.
+    type resource-id = string;
+
+    record block-state {
+        block: resource-id,
+        /// Property names to values. Values are strings, including "true" and "5", because
+        /// that is how the game writes them. May be partial.
+        properties: list<tuple<string, string>>,
+    }
+
+    record item-stack {
+        item: resource-id,
+        count: u32,
+        /// Data component type id to its value. The value is passed through unvalidated.
+        components: list<tuple<resource-id, json>>,
+    }
+
+    variant value {
+        bool-value(bool),
+        int-value(s64),
+        float-value(f64),
+        string-value(string),
+        id-value(resource-id),
+        block-state-value(block-state),
+        item-stack-value(item-stack),
+        text-value(json),
+        list-value(list<value>),
+        enum-value(string),
+    }
+}
+
+/// The IR a block produces. This mirrors spec/ir.schema.json exactly; the schema is the
+/// normative statement of meaning and this is its shape at the boundary.
+interface ir {
+    use values.{json, resource-id};
+
+    /// Node id, slot name and index: the stable address of the statement that produced a
+    /// thing, and the anchor of every diagnostic about it. `node` is absent for a statement
+    /// in the graph's own top-level slot.
+    record statement-address {
+        node: option<string>,
+        slot: string,
+        index: u32,
+    }
+
+    /// One command line, tagged so that a structured variant can be added later without a
+    /// break (ADR-0012). `text-command` carries no leading slash and no newline.
+    variant command {
+        text-command(text-command-body),
+    }
+
+    record text-command-body {
+        command: string,
+        origin: statement-address,
+    }
+
+    /// The content of a resource. Tagged for the same reason.
+    variant body {
+        commands(list<command>),
+        json-body(json),
+    }
+
+    record resource {
+        /// Slash-separated registry category: "function", "tags/function". Never an enum
+        /// (ADR-0010); the host looks it up in target data.
+        category: string,
+        id: resource-id,
+        origin: statement-address,
+        body: body,
+    }
+
+    /// What a block returns: IR nodes to merge, never files. `pack-kind` selects which pack
+    /// of the build the resources belong to; v1 builds emit one pack, of kind "data".
+    record ir-patch {
+        pack-kind: string,
+        resources: list<resource>,
+    }
+}
+
+/// What the host tells a block about the build. Everything a block might otherwise reach for
+/// - the clock, the environment, the filesystem - is either here or unavailable.
+interface build-context {
+    record context {
+        /// The release being built for, for example "26.2". A block never assumes a target.
+        target: string,
+        /// The project's default namespace, for ids the block mints.
+        namespace: string,
+        /// The address of the node being lowered, for minting stable ids and for diagnostics.
+        origin: string,
+        /// Seed derived by the host from the build inputs. The only randomness a block gets,
+        /// and the reason two builds of the same graph agree (ADR-0007).
+        seed: u64,
+    }
+}
+
+interface diagnostics {
+    enum severity {
+        error,
+        warning,
+        info,
+    }
+
+    /// A diagnostic is a value, never a bare string: a code, a severity, the node it belongs
+    /// to and, where possible, the fix (ADR-0009). "invalid input" is unfinished work.
+    record diagnostic {
+        code: string,
+        severity: severity,
+        message: string,
+        node: option<string>,
+        suggestion: option<string>,
+    }
+}
+
+world block {
+    use values.{value};
+    use ir.{ir-patch};
+    use build-context.{context};
+    use diagnostics.{diagnostic};
+
+    /// The block's own manifest, as a canonical-JSON document conforming to
+    /// spec/block-manifest.schema.json. Returned rather than declared in WIT because the
+    /// manifest is the same document for both block tiers (ADR-0004), and duplicating it as
+    /// WIT records would make the two drift.
+    export describe: func() -> string;
+
+    /// Lower one node to IR. Pure: the same inputs and context must produce the same patch.
+    /// Inputs are given by port name, already validated and defaulted by the compiler.
+    export emit: func(
+        inputs: list<tuple<string, value>>,
+        ctx: context,
+    ) -> result<ir-patch, list<diagnostic>>;
+}
