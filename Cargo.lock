@@ -3,5 +3,29 @@
 version = 4
 
 [[package]]
-name = "packsmith"
+name = "packsmith-blocks"
+version = "0.1.0"
+
+[[package]]
+name = "packsmith-cli"
+version = "0.1.0"
+
+[[package]]
+name = "packsmith-compiler"
+version = "0.1.0"
+
+[[package]]
+name = "packsmith-emit"
+version = "0.1.0"
+
+[[package]]
+name = "packsmith-ir"
+version = "0.1.0"
+
+[[package]]
+name = "packsmith-mcversion"
+version = "0.1.0"
+
+[[package]]
+name = "xtask"
 version = "0.1.0"

@@ -1,0 +1,10 @@
+[package]
+name = "packsmith-mcversion"
+description = "Minecraft: Java Edition target data: version table, registry ids, pack.mcmeta shaping."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]

@@ -1,0 +1,10 @@
+[package]
+name = "packsmith-ir"
+description = "Packsmith IR types and serialization. Pure data, no I/O."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]

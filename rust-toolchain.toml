@@ -1,0 +1,6 @@
+# The MSRV, pinned. It is also declared as `rust-version` in the workspace
+# manifest; the two move together, and never silently.
+[toolchain]
+channel = "1.98.0"
+components = ["clippy", "rustfmt"]
+profile = "minimal"
