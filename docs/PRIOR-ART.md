@@ -28,3 +28,15 @@ the ones that exist are usually better than a rushed reimplementation.
 Not "visual" and not "self-hosted" — both exist. The claim is **shareable, versioned,
 multi-language blocks**: a package ecosystem for data pack logic, aimed at people who do not
 write code. If a design choice does not serve that claim, it is not a priority.
+
+## Data sources
+
+- **misode/mcmeta**. Processed, version-controlled history of Minecraft's generated data and
+  assets, produced by running Mojang's own data generator on each release. Our primary target
+  data source (ADR-0014). `summary` branch for the command tree, registries, and blocks;
+  `data` branch for the vanilla pack and the root `version.json`.
+- **Mojang/brigadier** (MIT). The command parser and dispatcher itself. Useful to read for how
+  the command tree is structured; contains no Minecraft commands and is not a grammar source.
+- **PrismarineJS/minecraft-data**, **Arcensoth/mcdata**, the archived
+  **SPGoding/vanilla-datapack**. Alternative or historical extractions. Relevant mostly as
+  evidence of how the ecosystem handles redistribution of derived game data.

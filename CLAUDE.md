@@ -28,7 +28,12 @@ terms first, file terms second.
 
 `AGPL-3.0-or-later` for the platform (`crates/`, `web/`, registry, `xtask/`).
 `MIT OR Apache-2.0` for the contract and the tools (`spec/`, `conformance/`, `sdk/`).
-Moving code across that boundary is a deliberate, separate commit. See `docs/LICENSING.md`.
+**Neither** for `crates/packsmith-mcversion/data/**`: that is data derived from Minecraft,
+which we redistribute but do not own. It carries `LicenseRef-Minecraft-Derived` and is
+excluded from our grants in `NOTICE`.
+
+Moving code across a zone boundary is a deliberate, separate commit. See `docs/LICENSING.md`
+and ADR-0015.
 
 ## Read these before writing code
 
@@ -64,6 +69,10 @@ trade-off.
    scope but must be reachable by adding data, not by redesigning. (ADR-0010)
 8. **Semantics and layout are separate files.** Node positions never reach the build hash.
    (ADR-0013)
+9. **Minecraft-derived data is extracted, thin, marked, and loaded.** Extracted by `xtask`
+   from a pinned mcmeta commit, limited to functional data, marked with an SPDX identifier and
+   a provenance header, and read from a file at runtime rather than embedded in a binary.
+   Never a git submodule. (ADR-0014, ADR-0015)
 
 ## Repository layout
 

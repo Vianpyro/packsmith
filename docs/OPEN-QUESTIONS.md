@@ -22,6 +22,9 @@ write the ADR.
 | B4 | Language of code and docs | English. | - |
 | B5 | Licence | AGPL-3.0-or-later for the platform, MIT OR Apache-2.0 for `spec/`, `conformance/`, `sdk/`. | 0011 |
 | C4 | Can a block emit arbitrary files | No. IR nodes only. | 0005 |
+| F1 | Where does target data come from | Extracted from a pinned `misode/mcmeta` commit by `xtask`, vendored as a derived artifact. Jar `--reports` as fallback. | 0014 |
+| F2 | mcmeta as a git submodule | No. One commit cannot serve several targets, the browser cannot use a checkout, and it makes the network a build dependency. | 0014 |
+| F3 | Minecraft-derived data in an AGPL repo | Keep AGPL. Scope the grant in `NOTICE`, mark files `LicenseRef-Minecraft-Derived`, keep the subset thin and functional, load rather than embed. | 0015 |
 
 ---
 
@@ -84,6 +87,17 @@ Largely defused by ADR-0008: the server holds no projects and runs no user code.
 is publishing to a self-hosted registry.
 
 **Recommendation:** token-based publishing, no user accounts, no login for reading.
+
+### F4. Do we need a real legal opinion, and when? `OPEN`
+
+ADR-0015 is a conservative engineering posture, not legal advice. The whole tooling ecosystem
+redistributes generated Minecraft data, which is evidence of tolerated practice and nothing
+stronger.
+
+**Recommendation:** no opinion needed while this is an unfunded hobby project distributing
+only functional data. Get one before any of: taking money, accepting sponsorship tied to the
+project, distributing through a channel with its own IP review (a Linux distribution, an app
+store), or vendoring anything beyond the thin functional subset.
 
 ### E1. How do we verify a generated pack actually works? `OPEN` - BLOCKING Phase 2
 

@@ -1,0 +1,44 @@
+Packsmith
+Copyright (c) 2026 the Packsmith contributors
+
+This product includes software developed by the Packsmith project.
+
+--------------------------------------------------------------------------------
+SCOPE OF THE LICENCE GRANTS
+--------------------------------------------------------------------------------
+
+The licences in this repository cover Packsmith's own source code and
+documentation only. See docs/LICENSING.md for the zone boundaries:
+
+  AGPL-3.0-or-later   crates/, web/, the registry service, xtask/
+  MIT OR Apache-2.0   spec/, conformance/, sdk/
+
+--------------------------------------------------------------------------------
+CONTENT NOT COVERED BY THOSE GRANTS
+--------------------------------------------------------------------------------
+
+crates/packsmith-mcversion/data/**
+
+  Contains data derived from Minecraft: Java Edition, which is copyright
+  Mojang AB / Mojang Studios. It is included for interoperability and is NOT
+  covered by the licence grants above. Each file carries
+  `SPDX-License-Identifier: LicenseRef-Minecraft-Derived` and a provenance
+  header recording its upstream source and commit.
+
+  The extracted subset is deliberately limited to functional data: pack format
+  numbers, directory and extension tables, registry identifier lists, and a
+  pruned command grammar. No vanilla data pack content, assets, textures,
+  sounds, or language files are vendored. See ADR-0014 and ADR-0015.
+
+  Upstream source: https://github.com/misode/mcmeta
+  Fallback source: the Minecraft server jar's own data generator, via
+                   `net.minecraft.data.Main --reports`
+
+--------------------------------------------------------------------------------
+TRADEMARKS
+--------------------------------------------------------------------------------
+
+NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG.
+
+Minecraft is a trademark of Mojang Synergies AB. Packsmith is not affiliated
+with Mojang Studios or Microsoft.

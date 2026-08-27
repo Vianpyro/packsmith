@@ -38,3 +38,28 @@ and does not enforce a policy.
 Moving code between zones is a deliberate act, never a copy-paste. If a Zone 1 crate grows
 something an SDK needs, extract it into a new Zone 2 crate in its own commit, with the
 relicensing noted in the message.
+
+---
+
+## Zone 3 — Minecraft-derived data: covered by neither
+
+`crates/packsmith-mcversion/data/**`. Decided in ADR-0015.
+
+This is data extracted from Minecraft: Java Edition (via `misode/mcmeta`, itself produced by
+Mojang's own data generator). We do not own it and cannot sublicense it. The repository's
+`NOTICE` file says so explicitly, and every file in that directory carries
+`SPDX-License-Identifier: LicenseRef-Minecraft-Derived` plus its provenance header.
+
+Two rules keep this contained:
+
+- **Thin and functional only.** Format numbers, directory and extension tables, registry id
+  lists, pruned command grammar. Never loot tables, advancements, worldgen configurations,
+  language strings, or assets. If a feature needs those, it fetches them at runtime.
+- **Loaded, never embedded.** No `include_str!` of derived data into a Packsmith binary. It
+  stays a separate file the program reads, which keeps it an aggregate alongside our work
+  rather than a component compiled into it.
+
+Follow the REUSE specification (`https://reuse.software`) so per-file licensing is
+machine-checkable, and wire `reuse lint` into CI next to `cargo deny`.
+
+This is a conservative engineering posture, not legal advice.
