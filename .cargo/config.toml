@@ -1,0 +1,3 @@
+[alias]
+# `cargo xtask ...` runs the automation binary in `xtask/`. See CLAUDE.md.
+xtask = "run --quiet --package xtask --"

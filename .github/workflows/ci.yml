@@ -147,22 +147,36 @@ jobs:
       - run: cargo deny check
 
   # Invariant: Minecraft-derived data is marked, not silently vendored
-  # (ADR-0014/0015). Every file under the data directory must carry its SPDX
-  # identifier, and none may appear outside it.
+  # (ADR-0014/0015). REUSE.toml declares the path LicenseRef-Minecraft-Derived
+  # with override precedence; `reuse lint` checks it against the derived files,
+  # which also carry their own SPDX headers. The grep enforces the other half:
+  # the marker must not appear outside that directory.
+  #
+  # Scoped to the data directory on purpose: a whole-repo `reuse lint` needs
+  # every file annotated and the LICENSES/ texts in place, which is follow-on
+  # work (docs/BACKLOG.md). Until the directory exists (Phase 1), this is a
+  # no-op.
   licensing:
     name: minecraft-derived data is marked
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - run: |
+          stray=$(grep -rl 'LicenseRef-Minecraft-Derived' \
+            --exclude-dir=.git --exclude-dir=target \
+            --exclude=NOTICE --exclude=REUSE.toml --exclude='*.md' \
+            . | grep -v '^\./crates/packsmith-mcversion/data/' || true)
+          if [ -n "$stray" ]; then
+            echo "derived-data marker outside the data directory:" >&2
+            echo "$stray" >&2
+            exit 1
+          fi
+      - name: reuse lint the derived data
+        run: |
           dir=crates/packsmith-mcversion/data
           [ -d "$dir" ] || { echo "no derived data yet; nothing to check"; exit 0; }
-          fail=0
-          while IFS= read -r f; do
-            grep -q 'LicenseRef-Minecraft-Derived' "$f" \
-              || { echo "unmarked derived data: $f" >&2; fail=1; }
-          done < <(find "$dir" -type f)
-          [ "$fail" = 0 ]
+          pipx install reuse
+          reuse lint-file $(find "$dir" -type f)
 
   # The one required check: green iff every job above is green. Skipped jobs
   # count as success.

@@ -7,4 +7,8 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[[bin]]
+name = "packsmith"
+path = "src/main.rs"
+
 [dependencies]

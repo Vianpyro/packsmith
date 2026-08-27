@@ -1,0 +1,11 @@
+{
+  "outcome": "compile-failure",
+  "diagnostics": [
+    {
+      "code": null,
+      "severity": "error",
+      "address": { "node": "fn-legacy", "slot": "body", "index": 0 },
+      "message": "execute no longer takes a bare selector and position; write `execute as @e[type=zombie] at @s run say boo`"
+    }
+  ]
+}

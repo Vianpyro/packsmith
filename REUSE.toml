@@ -1,0 +1,13 @@
+version = 1
+
+# Minecraft-derived target data is a separate work, excluded from Packsmith's
+# licence grants (ADR-0015, docs/LICENSING.md Zone 3). Each generated file also
+# carries its own SPDX header and provenance block (ADR-0014); this annotation
+# is the declarative backstop so the marking does not depend on every file
+# header being present and correct. `precedence = "override"` makes it win over
+# the crate's AGPL licence for anything under this path.
+[[annotations]]
+path = "crates/packsmith-mcversion/data/**"
+precedence = "override"
+SPDX-FileCopyrightText = "Mojang AB / Mojang Studios"
+SPDX-License-Identifier = "LicenseRef-Minecraft-Derived"

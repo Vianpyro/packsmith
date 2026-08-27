@@ -19,3 +19,10 @@ widening the scope of the task in front of you. Nothing here is committed to.
 - `conformance/` has no schema for `target.json`. The cases currently use `{ "id": "26.2" }`,
   matching the `target` object in `ir.schema.json`. Worth a one-object schema so the runner
   can reject a malformed target.
+- CI runs `reuse lint-file` scoped to `crates/packsmith-mcversion/data/` only. Promote it to a
+  whole-repo `reuse lint` once every file carries SPDX info (via headers or `REUSE.toml`
+  aggregate annotations for the two licence zones) and `LICENSES/` holds the canonical texts
+  (`AGPL-3.0-or-later`, `MIT`, `Apache-2.0`, `LicenseRef-Minecraft-Derived`).
+- `conformance/` has no schema for `expected-diagnostics.json` (the compile-failure result
+  format defined in `conformance/README.md`). A one-object schema would let the runner reject
+  a malformed expectation instead of misreading it.
