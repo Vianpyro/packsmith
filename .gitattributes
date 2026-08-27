@@ -1,4 +1,4 @@
-* text=auto
+* text=auto eol=lf
 
 # Derived target data is checked byte-for-byte against a re-run of the extractor
 # (ADR-0014). Pin it to LF so "byte-identical" means the same thing on every OS.
