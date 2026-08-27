@@ -2,13 +2,20 @@
   {
     "label": "ci (full gate)",
     "command": "cargo",
-    "args": ["xtask", "ci"],
+    "args": [
+      "xtask",
+      "ci"
+    ],
     "reveal": "always"
   },
   {
     "label": "test",
     "command": "cargo",
-    "args": ["test", "--workspace", "--all-features"],
+    "args": [
+      "test",
+      "--workspace",
+      "--all-features"
+    ],
     "reveal": "always"
   },
   {
@@ -28,19 +35,29 @@
   {
     "label": "fmt",
     "command": "cargo",
-    "args": ["fmt", "--all"],
-    "reveal": "on_failure"
+    "args": [
+      "fmt",
+      "--all"
+    ],
+    "reveal": "no_focus"
   },
   {
     "label": "deny (licenses + advisories)",
     "command": "cargo",
-    "args": ["deny", "check"],
+    "args": [
+      "deny",
+      "check"
+    ],
     "reveal": "always"
   },
   {
     "label": "test at cursor",
     "command": "cargo",
-    "args": ["test", "--workspace", "$ZED_SYMBOL"],
+    "args": [
+      "test",
+      "--workspace",
+      "$ZED_SYMBOL"
+    ],
     "reveal": "always"
   }
 ]

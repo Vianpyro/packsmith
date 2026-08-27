@@ -22,7 +22,7 @@
     },
     "Markdown": {
       "format_on_save": "off",
-      "soft_wrap": "preferred_line_length",
+      "soft_wrap": "prefer_line",
       "preferred_line_length": 100
     }
   },
@@ -34,7 +34,9 @@
         "check": {
           "command": "clippy",
           "allTargets": true,
-          "extraArgs": ["--all-features"]
+          "extraArgs": [
+            "--all-features"
+          ]
         },
         "cargo": {
           "features": "all"
@@ -42,7 +44,9 @@
         // The IR and schema types are data-heavy; inline hints on chained
         // iterator work are worth more than they cost.
         "inlayHints": {
-          "closureReturnTypeHints": { "enable": "with_block" }
+          "closureReturnTypeHints": {
+            "enable": "with_block"
+          }
         }
       }
     }
