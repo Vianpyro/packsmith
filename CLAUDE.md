@@ -97,6 +97,30 @@ docs/, .claude/
 Dependency direction is strictly downward: `ir` <- `mcversion` <- `compiler` <- `emit` <- `cli`.
 A crate never imports from a crate to its right in that chain.
 
+## Working style
+
+Deliver what was asked, at the scope intended. Make routine judgment calls yourself, and check
+in only when different readings of the request would lead to materially different work. If the
+request seems mistaken or a better approach exists, say so in a sentence and continue with the
+task as asked, rather than quietly narrowing, widening, or transforming it. Finish the whole
+task and stop short of actions clearly beyond it. Adjacent work you notice goes in
+`docs/BACKLOG.md`.
+
+Before the first tool call, say in one sentence what you are about to do. While working, give a
+brief update only when you find something important or change direction. When you finish, lead
+with the outcome.
+
+Match the length of written documents to what the task needs. Cover the substance; do not pad
+with filler sections, redundant summaries, or restated context. An ADR is one page. A schema
+carries `description` fields, not prose essays.
+
+Only correct an earlier statement when the error would change the code, the conclusions, or a
+decision. Make silent fixes and move on.
+
+Delegate to a subagent only for large, genuinely independent tracks of work, such as a wide
+multi-file investigation. Do not delegate what you can finish in a handful of tool calls, and
+do not use subagents to check your own work. Keep spawn counts low.
+
 ## Commands
 
 ```
