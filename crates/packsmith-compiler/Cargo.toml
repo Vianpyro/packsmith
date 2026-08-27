@@ -1,6 +1,7 @@
 [package]
 name = "packsmith-compiler"
 description = "Graph to IR: validation, diagnostics, and version resolution."
+publish = false
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

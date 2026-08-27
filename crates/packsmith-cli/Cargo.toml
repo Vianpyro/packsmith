@@ -1,6 +1,7 @@
 [package]
 name = "packsmith-cli"
 description = "The packsmith command line interface."
+publish = false
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

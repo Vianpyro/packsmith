@@ -1,6 +1,7 @@
 [package]
 name = "packsmith-emit"
 description = "IR to file tree to deterministic zip."
+publish = false
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

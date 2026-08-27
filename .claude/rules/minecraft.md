@@ -63,7 +63,8 @@ These are here because they determine control flow, not because they replace ext
 
 ## The 26.2 number
 
-mcmeta at `26.2-pre-2` reports `data_pack_version: 107`, `data_pack_version_minor: 0`,
-`resource_pack_version: 88`. **That is a pre-release. Do not commit it as fact.** Run the
-extractor against released 26.2 and use what it returns. Until then the target table is a stub
-and the compiler fails loudly rather than assuming.
+Released 26.2 (`misode/mcmeta` tag `26.2-summary`, commit `711a353b…`) reports data pack
+format **107.1** and resource pack format **88.0**. This is what
+`crates/packsmith-mcversion/data/26.2.json` carries, extracted by `cargo xtask sync-target`.
+The `26.2-pre-2` numbers (data pack format 107.0) were a pre-release and are superseded; see
+the ADR-0014 amendment. Do not carry the pre-release number forward.

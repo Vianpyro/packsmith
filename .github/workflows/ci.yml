@@ -146,6 +146,21 @@ jobs:
       - run: cargo machete
       - run: cargo deny check
 
+  # ADR-0014: CI re-runs the extractor and requires byte-identical output, the
+  # same integrity guarantee a pinned submodule would give. `--check` re-fetches
+  # the pinned mcmeta commit and diffs against the committed file, ignoring only
+  # the wall-clock `extracted` date.
+  target-data:
+    name: target data matches its mcmeta pin
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - run: cargo xtask sync-target --version 26.2 --check
+
   # Invariant: Minecraft-derived data is marked, not silently vendored
   # (ADR-0014/0015). REUSE.toml declares the path LicenseRef-Minecraft-Derived
   # with override precedence; `reuse lint` checks it against the derived files,
@@ -162,9 +177,15 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: |
+          # Excluded, in order: this workflow (names the marker to check for),
+          # the LICENSES/ text for the identifier, and sync_target.rs (the
+          # extractor that writes the marker into each data file). None of these
+          # is vendored derived data.
           stray=$(grep -rl 'LicenseRef-Minecraft-Derived' \
             --exclude-dir=.git --exclude-dir=target \
+            --exclude-dir=.github --exclude-dir=LICENSES \
             --exclude=NOTICE --exclude=REUSE.toml --exclude='*.md' \
+            --exclude=sync_target.rs \
             . | grep -v '^\./crates/packsmith-mcversion/data/' || true)
           if [ -n "$stray" ]; then
             echo "derived-data marker outside the data directory:" >&2
@@ -182,7 +203,7 @@ jobs:
   # count as success.
   ci-ok:
     name: CI OK
-    needs: [lint, test, determinism, msrv, docs, deps, licensing]
+    needs: [lint, test, determinism, msrv, docs, deps, target-data, licensing]
     if: always()
     runs-on: ubuntu-latest
     steps:

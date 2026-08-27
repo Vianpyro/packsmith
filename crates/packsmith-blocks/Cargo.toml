@@ -1,6 +1,7 @@
 [package]
 name = "packsmith-blocks"
 description = "The built-in declarative blocks."
+publish = false
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
