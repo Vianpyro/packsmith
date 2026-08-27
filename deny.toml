@@ -7,11 +7,15 @@
 yanked = "deny"
 
 [licenses]
-# The platform is AGPL-3.0-or-later and the spec/SDK zone is MIT OR
-# Apache-2.0 (docs/LICENSING.md, ADR-0015). Both zones can absorb permissive
-# dependencies; neither can absorb a copyleft dependency without changing the
-# zone's own terms, so the allowlist is permissive-only and adding to it is a
-# deliberate decision.
+# This allowlist gates third-party dependencies only. Our own workspace crates
+# are AGPL-3.0-or-later (docs/LICENSING.md, ADR-0015) and are skipped via
+# `private.ignore` below - they all carry `publish = false`.
+#
+# The platform is AGPL-3.0-or-later and the spec/SDK zone is MIT OR Apache-2.0.
+# Both zones can absorb permissive dependencies; neither can absorb a copyleft
+# dependency without changing the zone's own terms, so the allowlist is
+# permissive-only and adding to it is a deliberate decision.
+private = { ignore = true }
 allow = [
     "Apache-2.0",
     "Apache-2.0 WITH LLVM-exception",

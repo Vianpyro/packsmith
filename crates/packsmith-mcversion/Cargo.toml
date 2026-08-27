@@ -1,6 +1,7 @@
 [package]
 name = "packsmith-mcversion"
 description = "Minecraft: Java Edition target data: version table, registry ids, pack.mcmeta shaping."
+publish = false
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
