@@ -10,3 +10,8 @@ super-linter.log
 
 # GitHub Actions leftovers
 github_conf
+
+
+# Added by cargo
+
+/target
