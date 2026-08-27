@@ -1,0 +1,26 @@
+# Categorization for GitHub's auto-generated release notes (the
+# `--generate-notes` flag in release.yml reads this). PRs are grouped by
+# label; the trailing `*` catch-all keeps anything unlabeled from being
+# dropped. Labels match the branch-name categories enforced by
+# branch-name-validation.yml.
+changelog:
+  exclude:
+    labels:
+      - ignore-for-release
+    authors:
+      - dependabot
+  categories:
+    - title: New features
+      labels: [feature, enhancement]
+    - title: Bug fixes
+      labels: [bug, fix, hotfix]
+    - title: Architecture decisions
+      labels: [adr]
+    - title: Spec and conformance
+      labels: [spec, conformance]
+    - title: Build, CI and release
+      labels: [ci-cd, build, release]
+    - title: Documentation
+      labels: [docs]
+    - title: Other changes
+      labels: ["*"]

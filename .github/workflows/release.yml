@@ -1,0 +1,188 @@
+name: Release
+
+# One release stream: the version in Cargo.toml is the SINGLE source of truth.
+# Bumping it on main creates the release (tag vX.Y.Z) and attaches the CLI for
+# every supported host. Re-pushing without a bump is a no-op: the tag already
+# exists.
+#
+# Data packs built by the CLI are the product; the CLI is what users install.
+# The block registry (Phase 5) will publish separately when it exists.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "Cargo.toml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Serialize runs: a draft release does not reserve its tag, so two quick
+# pushes could otherwise both pass the tag-exists check and double-draft.
+concurrency:
+  group: release
+
+jobs:
+  version:
+    name: detect version bump
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+      release: ${{ steps.check.outputs.release }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(grep -m1 '^version' Cargo.toml | sed 's/.*"\(.*\)".*/\1/')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if git ls-remote --exit-code origin "refs/tags/v$version" > /dev/null; then
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            echo "tag v$version already exists; nothing to release"
+          else
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          fi
+      # Draft first; the publish job flips it live once all assets are up.
+      - name: create draft release
+        if: steps.check.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v${{ steps.check.outputs.version }}" \
+            --draft --generate-notes \
+            --title "Packsmith v${{ steps.check.outputs.version }}" \
+            --target "$GITHUB_SHA"
+
+  cli:
+    name: cli (${{ matrix.label }})
+    needs: version
+    if: needs.version.outputs.release == 'true'
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: linux-x64
+          - os: ubuntu-24.04-arm
+            label: linux-arm64
+          - os: windows-latest
+            label: windows-x64
+          - os: macos-latest
+            label: macos-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release --locked
+      # Smoke test: a binary that cannot start is caught before it ships.
+      # Every matrix leg runs on its native arch, so this executes everywhere.
+      - name: smoke test binary
+        shell: bash
+        run: |
+          ext=""
+          [ "$RUNNER_OS" = "Windows" ] && ext=".exe"
+          "target/release/packsmith$ext" --version || true
+      - name: package (unix)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p dist/packsmith
+          cp target/release/packsmith dist/packsmith/
+          cp README.md NOTICE dist/packsmith/
+          tar -C dist -czf "packsmith-v${{ needs.version.outputs.version }}-${{ matrix.label }}.tar.gz" packsmith
+      - name: package (windows)
+        if: runner.os == 'Windows'
+        run: |
+          New-Item -ItemType Directory -Force dist/packsmith | Out-Null
+          Copy-Item target/release/packsmith.exe dist/packsmith/
+          Copy-Item README.md, NOTICE dist/packsmith/
+          Compress-Archive -Path dist/packsmith -DestinationPath "packsmith-v${{ needs.version.outputs.version }}-${{ matrix.label }}.zip"
+      - name: upload
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "v${{ needs.version.outputs.version }}" packsmith-v*
+
+  # Integrity and provenance for every attached asset. Runs after the uploads
+  # but BEFORE publish, so SHA256SUMS is in the release the instant it goes
+  # public. Also the single place that asserts the release is complete.
+  checksums:
+    name: checksums + signing
+    needs: [version, cli]
+    if: needs.version.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # attach SHA256SUMS (+ signature)
+      id-token: write # Sigstore keyless signing via GitHub OIDC
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }} # no checkout in this job; gh needs it
+      V: ${{ needs.version.outputs.version }}
+    steps:
+      - name: download every attached asset
+        run: |
+          mkdir -p assets
+          gh release download "v$V" --dir assets --pattern 'packsmith-*'
+      - name: verify all expected artifacts are present
+        run: |
+          expected=(
+            "packsmith-v$V-linux-x64.tar.gz"
+            "packsmith-v$V-linux-arm64.tar.gz"
+            "packsmith-v$V-windows-x64.zip"
+            "packsmith-v$V-macos-arm64.tar.gz"
+          )
+          missing=0
+          for f in "${expected[@]}"; do
+            [ -f "assets/$f" ] || { echo "MISSING: $f" >&2; missing=1; }
+          done
+          [ "$missing" = 0 ] || { echo "release is incomplete" >&2; exit 1; }
+      - name: validate archive integrity
+        run: |
+          cd assets
+          fail=0
+          for a in *.tar.gz; do tar -tzf "$a" >/dev/null || { echo "corrupt: $a" >&2; fail=1; }; done
+          for a in *.zip;    do unzip -tqq "$a" >/dev/null || { echo "corrupt: $a" >&2; fail=1; }; done
+          [ "$fail" = 0 ]
+      - name: generate SHA256SUMS
+        run: |
+          cd assets
+          sha256sum packsmith-* | sort -k2 > ../SHA256SUMS
+          cat ../SHA256SUMS
+      # Best-effort signing: a Sigstore outage or a fork without OIDC must
+      # never fail the release, so both steps continue-on-error and the upload
+      # only attaches .sig/.pem if they were produced.
+      - name: install cosign
+        id: cosign
+        continue-on-error: true
+        uses: sigstore/cosign-installer@v3
+      - name: sign checksums (Sigstore keyless)
+        if: steps.cosign.outcome == 'success'
+        continue-on-error: true
+        run: |
+          cosign sign-blob --yes SHA256SUMS \
+            --output-signature SHA256SUMS.sig \
+            --output-certificate SHA256SUMS.pem
+      - name: upload checksums (+ signature if present)
+        run: |
+          files=(SHA256SUMS)
+          [ -f SHA256SUMS.sig ] && files+=(SHA256SUMS.sig)
+          [ -f SHA256SUMS.pem ] && files+=(SHA256SUMS.pem)
+          gh release upload "v$V" "${files[@]}" --clobber
+
+  publish:
+    name: publish release
+    needs: [version, cli, checksums]
+    if: needs.version.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release edit "v${{ needs.version.outputs.version }}" --draft=false

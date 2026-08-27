@@ -1,0 +1,41 @@
+# cargo-deny gates, run by the CI `deps` job.
+
+[advisories]
+# Any unmaintained or vulnerable dependency fails the build. Add a specific
+# `ignore = ["RUSTSEC-XXXX-NNNN"]` entry with a comment rather than relaxing
+# the whole gate.
+yanked = "deny"
+
+[licenses]
+# The platform is AGPL-3.0-or-later and the spec/SDK zone is MIT OR
+# Apache-2.0 (docs/LICENSING.md, ADR-0015). Both zones can absorb permissive
+# dependencies; neither can absorb a copyleft dependency without changing the
+# zone's own terms, so the allowlist is permissive-only and adding to it is a
+# deliberate decision.
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "ISC",
+    "MIT",
+    "MIT-0",
+    "Unicode-3.0",
+    "Zlib",
+]
+confidence-threshold = 0.9
+
+# Minecraft-derived data is not a dependency and carries no grant from us
+# (NOTICE, ADR-0015); it is checked by the CI `licensing` job instead.
+
+[bans]
+# Duplicate versions are visible, not fatal: a transitive diamond is usually
+# out of our hands. Determinism (ADR-0007) is what actually matters, and that
+# is enforced by the conformance suite.
+multiple-versions = "warn"
+wildcards = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

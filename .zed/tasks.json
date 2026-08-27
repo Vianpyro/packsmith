@@ -1,0 +1,46 @@
+[
+  {
+    "label": "ci (full gate)",
+    "command": "cargo",
+    "args": ["xtask", "ci"],
+    "reveal": "always"
+  },
+  {
+    "label": "test",
+    "command": "cargo",
+    "args": ["test", "--workspace", "--all-features"],
+    "reveal": "always"
+  },
+  {
+    "label": "clippy",
+    "command": "cargo",
+    "args": [
+      "clippy",
+      "--workspace",
+      "--all-targets",
+      "--all-features",
+      "--",
+      "-D",
+      "warnings"
+    ],
+    "reveal": "always"
+  },
+  {
+    "label": "fmt",
+    "command": "cargo",
+    "args": ["fmt", "--all"],
+    "reveal": "on_failure"
+  },
+  {
+    "label": "deny (licenses + advisories)",
+    "command": "cargo",
+    "args": ["deny", "check"],
+    "reveal": "always"
+  },
+  {
+    "label": "test at cursor",
+    "command": "cargo",
+    "args": ["test", "--workspace", "$ZED_SYMBOL"],
+    "reveal": "always"
+  }
+]

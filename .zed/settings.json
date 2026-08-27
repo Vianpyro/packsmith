@@ -1,0 +1,50 @@
+{
+  // Indentation, line endings and trailing whitespace come from
+  // .editorconfig, which Zed reads; only what it cannot express lives here.
+  "format_on_save": "on",
+  "formatter": "language_server",
+  "file_scan_exclusions": [
+    "**/.git",
+    "**/target",
+    "**/node_modules",
+    "**/.DS_Store"
+  ],
+  "languages": {
+    "Rust": {
+      // rustfmt's default and the width clippy assumes.
+      "preferred_line_length": 100
+    },
+    "JSON": {
+      "tab_size": 2
+    },
+    "YAML": {
+      "tab_size": 2
+    },
+    "Markdown": {
+      "format_on_save": "off",
+      "soft_wrap": "preferred_line_length",
+      "preferred_line_length": 100
+    }
+  },
+  "lsp": {
+    "rust-analyzer": {
+      "initialization_options": {
+        // Same lints in the editor as in CI: clippy with all targets, so a
+        // warning in a test shows up before the push, not after.
+        "check": {
+          "command": "clippy",
+          "allTargets": true,
+          "extraArgs": ["--all-features"]
+        },
+        "cargo": {
+          "features": "all"
+        },
+        // The IR and schema types are data-heavy; inline hints on chained
+        // iterator work are worth more than they cost.
+        "inlayHints": {
+          "closureReturnTypeHints": { "enable": "with_block" }
+        }
+      }
+    }
+  }
+}

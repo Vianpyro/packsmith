@@ -1,18 +1,32 @@
 {
-    "name": "Template Development Container",
-    "image": "mcr.microsoft.com/devcontainers/base:bookworm",
-    "customizations": {
-        "settings": {
-            "terminal.integrated.shell.linux": "/bin/bash"
-        },
-        "vscode": {
-            "extensions": [
-                "ms-vscode.atom-keybindings",
-                "ms-vscode-remote.remote-containers",
-                "ms-azuretools.vscode-docker",
-                "myriad-dreamin.tinymist"
-            ]
-        }
-    },
-    "remoteUser": "vscode"
+  // Packsmith dev toolchain: the Rust workspace and the repo automation.
+  // Phase 0 is specification, so this stays a Rust + JSON Schema box; the
+  // web editor (Phase 4) will add a Node feature here when it exists.
+  //
+  // Zed has no built-in dev container support: use the `devcontainer` CLI
+  // (`devcontainer up --workspace-folder .`) and Zed's remote project, or
+  // work on the host. VS Code / Codespaces open it directly.
+  "name": "Packsmith",
+  "build": { "dockerfile": "Dockerfile" },
+  // Persist the slow cache across rebuilds. ~/.cargo/bin is deliberately
+  // NOT a volume so the image-installed tools survive.
+  "mounts": [
+    "source=packsmith-cargo-registry,target=/home/vscode/.cargo/registry,type=volume"
+  ],
+  "postCreateCommand": "cargo fetch --locked",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "rust-lang.rust-analyzer",
+        "tamasfe.even-better-toml",
+        "vadimcn.vscode-lldb",
+        "redhat.vscode-yaml",
+        "EditorConfig.EditorConfig"
+      ],
+      "settings": {
+        "rust-analyzer.check.command": "clippy"
+      }
+    }
+  },
+  "remoteUser": "vscode"
 }

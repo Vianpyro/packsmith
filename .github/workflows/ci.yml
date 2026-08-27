@@ -1,0 +1,184 @@
+name: CI
+
+# Quality gate for the Rust side. Branch protection should require the single
+# `CI OK` job - it aggregates every other job, so adding a job here never
+# needs a settings change. Prose and schemas are linted by super-linter.yml.
+#
+# The weekly cron is a bit-rot canary: fresh RustSec advisories and toolchain
+# drift surface on main without waiting for the next PR.
+
+on:
+  push:
+    branches: [main]
+    # Keep the two lists identical (GHA has no reliable YAML-anchor support
+    # to share them).
+    paths-ignore:
+      - "docs/**"
+      - "**.md"
+      - "LICENSE*"
+      - "NOTICE"
+      - ".devcontainer/**"
+      - ".claude/**"
+      - ".zed/**"
+      - ".vscode/**"
+  pull_request:
+    paths-ignore:
+      - "docs/**"
+      - "**.md"
+      - "LICENSE*"
+      - "NOTICE"
+      - ".devcontainer/**"
+      - ".claude/**"
+      - ".zed/**"
+      - ".vscode/**"
+  schedule:
+    - cron: "40 4 * * 1"
+
+# One run per ref: pushing again cancels the outdated build - except on main,
+# where every commit's result is worth keeping.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  # Incremental compilation only helps local edit-rebuild loops; in CI it
+  # slows the build and bloats the cache.
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  lint:
+    name: fmt + typos + clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: typos
+      - run: cargo fmt --all --check
+      - run: typos
+      - run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - run: cargo test --workspace --all-features --locked
+
+  # Determinism is invariant 3 (ADR-0007): the same inputs must produce a
+  # byte-identical zip. Running the suite twice in a row is the cheap version
+  # of that check - it catches HashMap iteration order and other nondeterminism
+  # that a single run hides. The real gate is the conformance suite once
+  # `cargo xtask ci` exists (Phase 1); wire it in here then.
+  determinism:
+    name: tests are order-independent
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --workspace --all-features --locked
+      - run: cargo test --workspace --all-features --locked
+        env:
+          # Second pass single-threaded: a suite that only passes when its
+          # tests run in parallel (or in a particular order) fails here.
+          RUST_TEST_THREADS: 1
+
+  # MSRV is a hard constraint (CLAUDE.md): it must not rise silently. The
+  # floor is read from Cargo.toml so there is exactly one place to bump.
+  # `check --all-targets` compiles everything without codegen - fast and honest.
+  msrv:
+    name: msrv / check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - id: msrv
+        run: |
+          v=$(grep -m1 '^rust-version' Cargo.toml | sed 's/.*"\(.*\)".*/\1/')
+          echo "toolchain=$v" >> "$GITHUB_OUTPUT"
+          echo "MSRV floor: $v"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.msrv.outputs.toolchain }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - run: cargo check --workspace --all-targets --locked
+
+  docs:
+    name: rustdoc
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - run: cargo doc --workspace --no-deps --locked
+        env:
+          RUSTDOCFLAGS: -D warnings
+
+  # Dependency hygiene: no unused deps (machete reads metadata, no build) and
+  # the cargo-deny gates in deny.toml - RustSec advisories, an AGPL-compatible
+  # license allowlist, duplicate-version visibility, crates.io-only sources.
+  deps:
+    name: deny (advisories/licenses) + unused deps
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny,cargo-machete
+      - run: cargo machete
+      - run: cargo deny check
+
+  # Invariant: Minecraft-derived data is marked, not silently vendored
+  # (ADR-0014/0015). Every file under the data directory must carry its SPDX
+  # identifier, and none may appear outside it.
+  licensing:
+    name: minecraft-derived data is marked
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: |
+          dir=crates/packsmith-mcversion/data
+          [ -d "$dir" ] || { echo "no derived data yet; nothing to check"; exit 0; }
+          fail=0
+          while IFS= read -r f; do
+            grep -q 'LicenseRef-Minecraft-Derived' "$f" \
+              || { echo "unmarked derived data: $f" >&2; fail=1; }
+          done < <(find "$dir" -type f)
+          [ "$fail" = 0 ]
+
+  # The one required check: green iff every job above is green. Skipped jobs
+  # count as success.
+  ci-ok:
+    name: CI OK
+    needs: [lint, test, determinism, msrv, docs, deps, licensing]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: verify all jobs passed
+        run: |
+          results='${{ join(needs.*.result, ' ') }}'
+          echo "job results: $results"
+          for r in $results; do
+            case "$r" in
+              success|skipped) ;;
+              *) echo "a required job ended as: $r" >&2; exit 1 ;;
+            esac
+          done
