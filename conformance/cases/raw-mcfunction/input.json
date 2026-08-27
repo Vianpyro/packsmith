@@ -1,0 +1,17 @@
+{
+  "version": 0,
+  "project": {
+    "name": "Raw mcfunction",
+    "namespace": "example"
+  },
+  "root": [
+    {
+      "id": "fn-raw",
+      "block": "packsmith/mcfunction@1.0.0",
+      "inputs": {
+        "name": "example:raw_notes",
+        "source": "# hand-written: no block covers this yet\nsay first line\n\nsay second line\n"
+      }
+    }
+  ]
+}

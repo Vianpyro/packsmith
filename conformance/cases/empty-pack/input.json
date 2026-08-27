@@ -1,0 +1,9 @@
+{
+  "version": 0,
+  "project": {
+    "name": "Empty Pack",
+    "namespace": "example",
+    "description": "An empty Packsmith project."
+  },
+  "root": []
+}

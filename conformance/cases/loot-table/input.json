@@ -1,0 +1,17 @@
+{
+  "version": 0,
+  "project": {
+    "name": "Loot Table",
+    "namespace": "example"
+  },
+  "root": [
+    {
+      "id": "loot-sparkstone",
+      "block": "packsmith/loot-table@1.0.0",
+      "inputs": {
+        "name": "example:blocks/sparkstone",
+        "drops": [ { "item": "minecraft:diamond" } ]
+      }
+    }
+  ]
+}

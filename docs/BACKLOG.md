@@ -10,3 +10,12 @@ widening the scope of the task in front of you. Nothing here is committed to.
   spec document before Phase 1 writes a template expander.
 - Schema validation in CI: `cargo xtask ci` should validate every conformance `input.json`
   against `spec/graph.schema.json`, and the schemas themselves against draft 2020-12.
+- The raw-mcfunction escape hatch (conformance case `raw-mcfunction`) needs a string format
+  for a whole function file — split on newlines, skip blank and `#`-comment lines, validate
+  the rest as commands. `spec/types.md` section 4.4 already makes formats open and
+  target-data-supplied, but the section 7 coverage row for `function` lists only
+  `string(command)` and `string(selector)`. Either add the file-level format to that row or
+  decide the escape hatch is `list<string(command)>` and adjust the conformance case.
+- `conformance/` has no schema for `target.json`. The cases currently use `{ "id": "26.2" }`,
+  matching the `target` object in `ir.schema.json`. Worth a one-object schema so the runner
+  can reject a malformed target.

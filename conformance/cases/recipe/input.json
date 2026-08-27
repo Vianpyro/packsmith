@@ -1,0 +1,18 @@
+{
+  "version": 0,
+  "project": {
+    "name": "Recipe",
+    "namespace": "example"
+  },
+  "root": [
+    {
+      "id": "recipe-diamond",
+      "block": "packsmith/crafting-shapeless@1.0.0",
+      "inputs": {
+        "name": "example:diamond_from_block",
+        "ingredients": ["minecraft:diamond_block"],
+        "result": { "item": "minecraft:diamond", "count": 9 }
+      }
+    }
+  ]
+}
