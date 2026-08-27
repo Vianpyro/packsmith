@@ -1,0 +1,22 @@
+LicenseRef-Minecraft-Derived
+
+This identifier marks files that contain data derived from Minecraft: Java
+Edition, which is copyright Mojang AB / Mojang Studios. Packsmith redistributes
+this data for interoperability; it is NOT covered by Packsmith's own licence
+grants (AGPL-3.0-or-later for the platform, MIT OR Apache-2.0 for the contract
+and SDKs).
+
+The derived subset is deliberately limited to functional data: pack format
+numbers, directory and extension tables, registry identifier lists, and a
+pruned command grammar. It is extracted by `cargo xtask sync-target` from a
+pinned commit of https://github.com/misode/mcmeta, which republishes the output
+of Mojang's own data generator. No vanilla data pack content, assets, textures,
+sounds, or language files are included.
+
+Each marked file carries a provenance block recording its upstream source,
+commit, and extraction date. See NOTICE, docs/LICENSING.md, ADR-0014, and
+ADR-0015.
+
+This is a conservative engineering posture, not a licence grant and not legal
+advice. Mojang's rights are unaffected. If you redistribute Packsmith, review
+your own obligations with respect to Mojang's intellectual property.

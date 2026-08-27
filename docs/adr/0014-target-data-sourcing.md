@@ -69,3 +69,36 @@ ecosystem already treats this bus factor as real.
 mcmeta at `26.2-pre-2` reports `data_pack_version: 107`, `data_pack_version_minor: 0`,
 `resource_pack_version: 88`. **This is a pre-release and must not be committed as fact.**
 Confirm against the released 26.2 `version.json` before the target table leaves stub status.
+
+## Amendment 2026-08-27: pipeline implemented, 26.2 extracted
+
+`cargo xtask sync-target --version <v>` is implemented in `xtask/src/sync_target.rs`. It
+does a shallow blobless sparse `git` clone of a pinned mcmeta tag, verifies `HEAD` against a
+commit SHA held in the task, extracts the subset below, and writes
+`crates/packsmith-mcversion/data/<v>.json`. `packsmith-mcversion` loads that file at runtime
+(`TargetData::load`); a request for a target with no file is `LoadError::NotFound`.
+
+**26.2 pin.** Source `https://github.com/misode/mcmeta`, tag `26.2-summary`, commit
+`711a353b47d84e6cb592a1b72f682e5f44759284` (mcmeta version id `26.2`, upstream date
+2026-06-16). Extracted 2026-08-27.
+
+**Released 26.2 pack formats.** `data` **107.1** (major 107, minor 1), `resource` **88.0**.
+The pre-release datum above (107.0) is superseded and must not be carried forward.
+
+**Sourcing notes for the extracted subset.**
+
+- Pack formats and the `block` / `item` / `entity_type` id lists come straight from the
+  summary branch `version.json` and `registries/data.json`.
+- The command tree is the summary branch `commands/data.json` with every `permissions` key
+  removed: it is command-level authorisation, not grammar. No other pruning yet; "pruned to
+  what the validator uses" (above) waits on the validator existing (ADR-0012).
+- The category-to-directory-and-extension table is the seven v1 categories (ADR-0010,
+  OPEN-QUESTIONS A3). `recipe`, `loot_table`, and `advancement` are registry-backed and the
+  extractor fails if mcmeta stops listing them. `function`, `tags/function`, `predicate`, and
+  `item_modifier` are not datapack registries in any Minecraft-generated report — the game
+  special-cases them (`ServerFunctionLibrary`, `LootDataType`) — so their directory and
+  extension are held in the extractor's `V1_CATEGORIES` table. Likewise the pack-root names
+  `data` and `assets` are structural constants, not generated data. When the jar `--reports`
+  fallback lands (Phase 2) it will not change this: those directories are hardcoded upstream.
+- `provenance.extracted` is a wall-clock date and is the only field `--check` ignores when it
+  compares a re-extraction against the committed file.

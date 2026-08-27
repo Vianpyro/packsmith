@@ -2,9 +2,12 @@
 
 //! Repository automation, run as `cargo xtask <task>`.
 //!
-//! Phase 0 has one task: `ci`, the gate that must be green before a change is
-//! called done. It shells out to the same `cargo` invocations a contributor
-//! would type, then runs the conformance suite.
+//! `ci` is the gate that must be green before a change is called done: it shells
+//! out to the same `cargo` invocations a contributor would type, then runs the
+//! conformance suite. `sync-target` regenerates a target's derived data file
+//! from a pinned mcmeta commit (ADR-0014).
+
+mod sync_target;
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
@@ -13,12 +16,22 @@ const USAGE: &str = "\
 usage: cargo xtask <task>
 
 tasks:
-  ci    fmt check, clippy (warnings denied), tests, and the conformance suite
+  ci                            fmt check, clippy (warnings denied), tests, conformance
+  sync-target --version <v>     regenerate crates/packsmith-mcversion/data/<v>.json from
+                                a pinned misode/mcmeta commit (add --check to only verify)
 ";
 
 fn main() -> ExitCode {
-    match std::env::args().nth(1).as_deref() {
+    let mut args = std::env::args().skip(1);
+    match args.next().as_deref() {
         Some("ci") => ci(),
+        Some("sync-target") => match sync_target::run(args) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("xtask sync-target: {e:#}");
+                ExitCode::FAILURE
+            }
+        },
         Some("-h") | Some("--help") => {
             print!("{USAGE}");
             ExitCode::SUCCESS

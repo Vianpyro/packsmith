@@ -19,3 +19,13 @@ edition = "2024"
 rust-version = "1.98.0"
 license = "AGPL-3.0-or-later"
 repository = "https://github.com/Vianpyro/packsmith"
+
+# Shared dependency versions. A crate opts in with `dep.workspace = true`.
+# serde/serde_json: target data is JSON on disk and the std has no JSON reader
+# or writer. thiserror: the typed-error convention for libraries. anyhow: CLI
+# and xtask only.
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+anyhow = "1"
