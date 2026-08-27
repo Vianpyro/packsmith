@@ -13,6 +13,23 @@ names, or logos. Descriptive use in prose ("data packs for Minecraft: Java Editi
 The README and the web UI footer must carry:
 `NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG.`
 
+## Who this is for
+
+Two personas, decided in ADR-0009. Every UX and diagnostic choice answers to them.
+
+- **The newcomer.** Never written code. Does not know what a namespace is.
+- **The returning creator.** Made data packs on 1.16 or thereabouts and lost the thread
+  through the format churn. Knows Minecraft deeply, knows current syntax not at all.
+
+Developers are served by the CLI, not by a second editor mode. Errors are phrased in game
+terms first, file terms second.
+
+## Licensing zones
+
+`AGPL-3.0-or-later` for the platform (`crates/`, `web/`, registry, `xtask/`).
+`MIT OR Apache-2.0` for the contract and the tools (`spec/`, `conformance/`, `sdk/`).
+Moving code across that boundary is a deliberate, separate commit. See `docs/LICENSING.md`.
+
 ## Read these before writing code
 
 - `docs/adr/` — accepted architecture decisions. **Do not contradict an accepted ADR.**
@@ -42,6 +59,11 @@ trade-off.
    no ambient authority. It returns IR nodes, never files. (ADR-0005)
 6. **Spec before implementation.** A schema and at least one conformance case exist before
    the code that satisfies them.
+7. **The pack model is open.** Pack kinds and registry categories are target data, never
+   a Rust `enum` and never a JSON Schema `enum`. Worldgen and resource packs are out of v1
+   scope but must be reachable by adding data, not by redesigning. (ADR-0010)
+8. **Semantics and layout are separate files.** Node positions never reach the build hash.
+   (ADR-0013)
 
 ## Repository layout
 
