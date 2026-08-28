@@ -59,9 +59,11 @@ syntax into a raw block produces a precise error rather than a silent failure in
 - Extract a second and third target. Constraint resolution across blocks, with diagnostics
   naming the offending block.
 - Both `pack.mcmeta` shapes: legacy single format, and the modern range.
-- Integration harness: a headless server in Docker loads the pack, runs `/reload` and a set of
-  test functions, and asserts on the output. This is also the fallback path for extracting
-  target data from a jar when mcmeta is unavailable.
+- Integration harness: vanilla headless GameTest (`net.minecraft.gametest.Main`), invoked from
+  `xtask`, builds a conformance case and a generated test pack and runs the game against it.
+  Assertions live in the test pack as `test_instance` assets with `function`-type environments,
+  not in log scraping. No mod loader. This is the same jar invocation family as the `--reports`
+  fallback for extracting target data when mcmeta is unavailable (ADR-0017, ADR-0014).
 
 **Exit:** the same graph compiles for three targets, and the integration harness runs in CI.
 

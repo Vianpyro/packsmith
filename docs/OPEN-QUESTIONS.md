@@ -22,6 +22,7 @@ write the ADR.
 | B4 | Language of code and docs | English. | - |
 | B5 | Licence | AGPL-3.0-or-later for the platform, MIT OR Apache-2.0 for `spec/`, `conformance/`, `sdk/`. | 0011 |
 | C4 | Can a block emit arbitrary files | No. IR nodes only. | 0005 |
+| E1 | How to verify a generated pack actually works | Vanilla headless GameTest (`net.minecraft.gametest.Main`), invoked from `xtask`. Assertions are `test_instance` assets with `function`-type environments, not log scraping. No mod loader. | 0017 |
 | F1 | Where does target data come from | Extracted from a pinned `misode/mcmeta` commit by `xtask`, vendored as a derived artifact. Jar `--reports` as fallback. | 0014 |
 | F2 | mcmeta as a git submodule | No. One commit cannot serve several targets, the browser cannot use a checkout, and it makes the network a build dependency. | 0014 |
 | F3 | Minecraft-derived data in an AGPL repo | Keep AGPL. Scope the grant in `NOTICE`, mark files `LicenseRef-Minecraft-Derived`, keep the subset thin and functional, load rather than embed. | 0015 |
@@ -98,16 +99,6 @@ stronger.
 only functional data. Get one before any of: taking money, accepting sponsorship tied to the
 project, distributing through a channel with its own IP review (a Linux distribution, an app
 store), or vendoring anything beyond the thin functional subset.
-
-### E1. How do we verify a generated pack actually works? `OPEN` - BLOCKING Phase 2
-
-Conformance tests prove the compiler produces the tree we expect. They do not prove the game
-accepts it.
-
-**Recommendation:** a Docker-based harness running a headless server, loading the pack,
-running `/reload` and a suite of test functions, and asserting on the output. Expensive to
-build, and the only test that answers the actual question. It is also the natural place to
-extract the command grammar that ADR-0012 depends on.
 
 ### E2. CI platform and gates? `OPEN`
 

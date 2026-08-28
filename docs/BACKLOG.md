@@ -26,3 +26,8 @@ widening the scope of the task in front of you. Nothing here is committed to.
 - `conformance/` has no schema for `expected-diagnostics.json` (the compile-failure result
   format defined in `conformance/README.md`). A one-object schema would let the runner reject
   a malformed expectation instead of misreading it.
+- Generate `test_instance` and `test_environment` assets for a user's own pack, so Packsmith
+  can emit tests for the pack it just built. Unscheduled, out of v1 scope. Under ADR-0010 the
+  pack model is open: `test_instance` and `test_environment` are registry categories like any
+  other, so supporting them is target data plus conformance cases, not a change to
+  `packsmith-ir` or `packsmith-compiler`. Noted in ADR-0017.
