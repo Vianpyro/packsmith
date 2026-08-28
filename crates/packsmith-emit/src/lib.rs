@@ -38,13 +38,16 @@ pub fn file_tree(ir: &Ir, target: &TargetData) -> Result<FileTree, EmitError> {
                 })?;
         let meta = PackMcmeta::new(pack.description.clone(), format);
         tree.insert("pack.mcmeta".to_string(), meta.to_bytes());
+        // Resources are not modelled yet (packsmith-ir). When they are, each
+        // lands at `<root>/<namespace>/<category dir>/<path>.<ext>` from target
+        // data, and the tree stays sorted for free (ROADMAP Phase 1).
     }
     Ok(tree)
 }
 
 /// Pack the file tree into a zip, deterministically: STORE (no compression, so
-/// no compressor version reaches the bytes), entries in sorted order, every
-/// timestamp pinned to 1980-01-01 (ADR-0007).
+/// no compressor version or level reaches the bytes; ADR-0018), entries in
+/// sorted order, every timestamp pinned to 1980-01-01 (ADR-0007).
 pub fn zip(tree: &FileTree) -> Vec<u8> {
     // DOS time/date: 1980-01-01 00:00:00, the zero point of the DOS epoch.
     const DOS_TIME: u16 = 0;
@@ -110,9 +113,16 @@ pub fn zip(tree: &FileTree) -> Vec<u8> {
     out
 }
 
-/// `pack.mcmeta` in the modern shape: `min_format` / `max_format` as
-/// `[major, minor]` pairs, required since 25w31a / 1.21.9
-/// (`.claude/rules/minecraft.md`). Both bracket the exact requested target.
+/// `pack.mcmeta` in the modern shape, required since 25w31a / 1.21.9
+/// (`.claude/rules/minecraft.md`): `min_format` is the `[major, minor]` of the
+/// requested target, `max_format` is the bare major. Minor format bumps are
+/// additive, so a pack built against 107.1 is equally valid at 107.5; pinning
+/// the upper bound to `[107, 1]` would instead warn the user, unfixably, on
+/// every point release.
+///
+/// Only the modern shape is emitted. The legacy single-integer `pack_format`
+/// shape, and choosing between the two from target data, is Phase 2 work
+/// (ROADMAP): no target this compiler supports needs it.
 #[derive(Serialize)]
 struct PackMcmeta {
     pack: PackSection,
@@ -123,17 +133,16 @@ struct PackSection {
     #[serde(skip_serializing_if = "Option::is_none")]
     description: Option<Text>,
     min_format: [u32; 2],
-    max_format: [u32; 2],
+    max_format: u32,
 }
 
 impl PackMcmeta {
     fn new(description: Option<Text>, format: packsmith_mcversion::PackFormat) -> Self {
-        let bracket = [format.major, format.minor];
         Self {
             pack: PackSection {
                 description,
-                min_format: bracket,
-                max_format: bracket,
+                min_format: [format.major, format.minor],
+                max_format: format.major,
             },
         }
     }
@@ -199,7 +208,7 @@ mod tests {
         assert_eq!(
             String::from_utf8(tree["pack.mcmeta"].clone()).unwrap(),
             "{\"pack\":{\"description\":\"An empty Packsmith project.\",\
-             \"min_format\":[107,1],\"max_format\":[107,1]}}\n"
+             \"min_format\":[107,1],\"max_format\":107}}\n"
         );
     }
 

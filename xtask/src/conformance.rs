@@ -11,13 +11,22 @@ use std::process::Command;
 
 use serde::Deserialize;
 
+/// How a conformance run went: how many verified cases were built and how many
+/// were skipped because their `expected/` still holds a `PLACEHOLDER.md`.
+pub(crate) struct Outcome {
+    pub ran: usize,
+    pub skipped: usize,
+}
+
 /// Build and verify every case whose `expected/` tree has been hand-checked
-/// against a real game instance. Returns how many were run.
+/// against a real game instance.
 ///
 /// A case is skipped while its `expected/` still holds a `PLACEHOLDER.md`: that
 /// marker means the tree has not been verified in game yet, so there is nothing
-/// trustworthy to compare against.
-pub(crate) fn run_verified_cases(cases_dir: &Path) -> Result<usize, Vec<String>> {
+/// trustworthy to compare against. A run where *every* buildable case is a
+/// placeholder is a failure, not a pass: CI would otherwise go green having
+/// checked nothing.
+pub(crate) fn run_verified_cases(cases_dir: &Path) -> Result<Outcome, Vec<String>> {
     if !crate::run_cargo(&["build", "-p", "packsmith-cli", "--locked"]) {
         return Err(vec!["cargo build -p packsmith-cli failed".to_string()]);
     }
@@ -36,25 +45,52 @@ pub(crate) fn run_verified_cases(cases_dir: &Path) -> Result<usize, Vec<String>>
     };
     names.sort();
 
+    let (verifiable, skipped) = partition_cases(&names, cases_dir);
+
     let mut problems = Vec::new();
-    let mut ran = 0;
-    for name in &names {
-        let case = cases_dir.join(name);
-        let expected = case.join("expected");
-        if !expected.is_dir() || expected.join("PLACEHOLDER.md").is_file() {
-            continue;
-        }
-        ran += 1;
-        if let Err(e) = verify_case(&bin, &case, name) {
+    for (name, case) in &verifiable {
+        if let Err(e) = verify_case(&bin, case, name) {
             problems.push(format!("{name}: {e}"));
         }
     }
+    if verifiable.is_empty() && skipped > 0 {
+        problems.push(format!(
+            "all {skipped} buildable conformance cases still carry expected/PLACEHOLDER.md; \
+             none has been verified in game"
+        ));
+    }
 
     if problems.is_empty() {
-        Ok(ran)
+        Ok(Outcome {
+            ran: verifiable.len(),
+            skipped,
+        })
     } else {
         Err(problems)
     }
+}
+
+/// Split case names into the ones with a real `expected/` tree to build against
+/// and a count of the ones still stubbed with `PLACEHOLDER.md`. A case with no
+/// `expected/` at all is a diagnostics-only case (it carries
+/// `expected-diagnostics.json`) and is the structural check's business, not
+/// this runner's.
+fn partition_cases(names: &[String], cases_dir: &Path) -> (Vec<(String, PathBuf)>, usize) {
+    let mut verifiable = Vec::new();
+    let mut skipped = 0;
+    for name in names {
+        let case = cases_dir.join(name);
+        let expected = case.join("expected");
+        if !expected.is_dir() {
+            continue;
+        }
+        if expected.join("PLACEHOLDER.md").is_file() {
+            skipped += 1;
+        } else {
+            verifiable.push((name.clone(), case));
+        }
+    }
+    (verifiable, skipped)
 }
 
 fn verify_case(bin: &Path, case: &Path, name: &str) -> Result<(), String> {
@@ -262,6 +298,43 @@ mod tests {
         b.insert("pack.mcmeta".to_string(), b"two".to_vec());
         assert!(compare(&a, &b).is_err());
         assert!(compare(&a, &a).is_ok());
+    }
+
+    #[test]
+    fn placeholder_cases_count_as_skipped_not_verifiable() {
+        let tmp = std::env::temp_dir().join("packsmith-conformance-partition-test");
+        let _ = std::fs::remove_dir_all(&tmp);
+        for name in ["a", "b"] {
+            let e = tmp.join(name).join("expected");
+            std::fs::create_dir_all(&e).unwrap();
+            std::fs::write(e.join("PLACEHOLDER.md"), "x").unwrap();
+        }
+        let real = tmp.join("c").join("expected");
+        std::fs::create_dir_all(&real).unwrap();
+        std::fs::write(real.join("pack.mcmeta"), "{}").unwrap();
+        std::fs::create_dir_all(tmp.join("d")).unwrap(); // diagnostics-only: no expected/
+
+        let names = ["a", "b", "c", "d"].map(str::to_string).to_vec();
+        let (verifiable, skipped) = partition_cases(&names, &tmp);
+        assert_eq!(skipped, 2);
+        assert_eq!(verifiable.len(), 1);
+        assert_eq!(verifiable[0].0, "c");
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn the_real_suite_still_has_at_least_one_placeholder_and_one_verified_case() {
+        let cases = crate::repo_root().join("conformance/cases");
+        let names: Vec<String> = std::fs::read_dir(&cases)
+            .unwrap()
+            .filter_map(Result::ok)
+            .filter(|e| e.path().is_dir())
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        let (verifiable, skipped) = partition_cases(&names, &cases);
+        assert!(!verifiable.is_empty(), "empty-pack should be verifiable");
+        assert!(skipped > 0, "the stubbed cases should be skipped");
     }
 
     #[test]

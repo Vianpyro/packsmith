@@ -94,8 +94,10 @@ fn ci() -> ExitCode {
 
     eprintln!("xtask ci: conformance (build + reproducibility)");
     match conformance::run_verified_cases(&cases_dir) {
-        Ok(0) => eprintln!("xtask ci: no verified cases to build yet"),
-        Ok(count) => eprintln!("xtask ci: conformance builds OK ({count} cases, hashes match)"),
+        Ok(o) => eprintln!(
+            "xtask ci: conformance builds OK ({} verified, hashes match; {} skipped, awaiting in-game verification)",
+            o.ran, o.skipped
+        ),
         Err(problems) => {
             eprintln!("xtask ci: conformance builds failed");
             for p in &problems {
@@ -131,6 +133,10 @@ pub(crate) fn repo_root() -> PathBuf {
 /// `input.json`, `target.json`, `README.md`, and exactly one expected result
 /// (`expected/` for a successful build, `expected-diagnostics.json` for a
 /// compile failure). Returns the case count on success.
+///
+/// Structure only. Building each case and diffing its tree is
+/// [`conformance::run_verified_cases`], which needs the compiler and emitter;
+/// this half runs even when those are broken.
 fn check_conformance(cases_dir: &Path) -> Result<usize, Vec<String>> {
     let mut names: Vec<String> = match std::fs::read_dir(cases_dir) {
         Ok(entries) => entries

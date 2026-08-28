@@ -5,10 +5,16 @@
 //! Phase 1 slice: lower a project with an empty `root` slot to the IR for a
 //! single `data` pack carrying the project description. An empty `root` is a
 //! valid, silent program, not an error (ADR-0016).
+//!
+//! This slice does no block resolution, no graph validation, and no statement
+//! lowering. A non-empty `root` is accepted and ignored; the one-function
+//! conformance case is what forces statements to be modelled (ROADMAP Phase 1).
 
 use serde::Deserialize;
 
 use packsmith_ir::{Ir, Pack, Target, Text};
+
+pub use packsmith_ir::{Diagnostic, Severity, StatementAddress};
 
 /// A graph document (`spec/graph.schema.json`), parsed only as far as this slice
 /// needs. `root` and `edges` are captured untyped so a malformed one still
@@ -33,13 +39,23 @@ pub struct Project {
     pub description: Option<Text>,
 }
 
+/// The outcome of lowering a graph: the IR, plus every diagnostic found. The
+/// list is empty for a clean compile. Errors are reported in it, not returned as
+/// `Err`: a graph with mistakes still lowers to a best-effort IR so the editor
+/// can show the whole picture at once (`.claude/rules/rust.md`).
+#[derive(Debug, Clone)]
+pub struct Compilation {
+    pub ir: Ir,
+    pub diagnostics: Vec<Diagnostic>,
+}
+
 /// Lower a graph to IR for `target_id`.
 ///
-/// Infallible for this slice: an empty `root` cannot fail to compile. The first
-/// failure mode arrives with graph validation, and returns a `Result` then.
-pub fn compile(graph: &Graph, target_id: &str) -> Ir {
+/// For this slice the diagnostic list is always empty: an empty `root` cannot
+/// fail to compile. Graph validation is what first fills it (ROADMAP Phase 1).
+pub fn compile(graph: &Graph, target_id: &str) -> Compilation {
     let _ = (&graph.root, &graph.edges);
-    Ir {
+    let ir = Ir {
         version: 0,
         target: Target {
             id: target_id.to_string(),
@@ -52,6 +68,10 @@ pub fn compile(graph: &Graph, target_id: &str) -> Ir {
             description: graph.project.description.clone(),
             resources: Vec::new(),
         }],
+    };
+    Compilation {
+        ir,
+        diagnostics: Vec::new(),
     }
 }
 
@@ -71,7 +91,8 @@ mod tests {
                              "description": "An empty Packsmith project." },
                 "root": [] }"#,
         );
-        let ir = compile(&g, "26.2");
+        let Compilation { ir, diagnostics } = compile(&g, "26.2");
+        assert!(diagnostics.is_empty());
         assert_eq!(ir.version, 0);
         assert_eq!(ir.target.id, "26.2");
         assert_eq!(ir.packs.len(), 1);
@@ -90,7 +111,7 @@ mod tests {
                 "project": { "name": "P", "namespace": "example" },
                 "root": [] }"#,
         );
-        let ir = compile(&g, "26.2");
+        let ir = compile(&g, "26.2").ir;
         assert!(ir.packs[0].description.is_none());
     }
 }

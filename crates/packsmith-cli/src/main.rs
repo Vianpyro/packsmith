@@ -5,7 +5,7 @@
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use packsmith_compiler::Graph;
+use packsmith_compiler::{Compilation, Diagnostic, Graph, Severity};
 use packsmith_mcversion::TargetData;
 
 const USAGE: &str = "\
@@ -22,10 +22,25 @@ commands:
 build:
   <project>          a project directory (containing graph.json) or a graph .json file
   --target <version> the Minecraft: Java Edition release to build for, e.g. 26.2
-  --output <file>    where to write the .zip (default: <project>.zip in the working directory)
+  --output <file>    where to write the .zip (default: <project name>.zip in the working directory)
 ";
 
 const BUILD_USAGE: &str = "usage: packsmith build <project> --target <version> [--output <file>]";
+
+const BUILD_HELP: &str = "\
+usage: packsmith build <project> --target <version> [--output <file>]
+
+compile a project into an installable .zip
+
+arguments:
+  <project>          a project directory containing graph.json, or a graph .json file
+
+options:
+  --target <version> the release to build for, e.g. 26.2 (required)
+  --output <file>    where to write the .zip
+                     (default: <project name>.zip in the working directory)
+  -h, --help         show this message
+";
 
 fn main() -> ExitCode {
     match run(std::env::args().skip(1).collect()) {
@@ -59,6 +74,11 @@ struct BuildArgs {
 }
 
 fn build(args: &[String]) -> Result<(), String> {
+    if args.iter().any(|a| a == "-h" || a == "--help") {
+        print!("{BUILD_HELP}");
+        return Ok(());
+    }
+
     let BuildArgs {
         project,
         target,
@@ -78,14 +98,26 @@ fn build(args: &[String]) -> Result<(), String> {
     let target_data = TargetData::load(&packsmith_mcversion::bundled_data_dir(), &target)
         .map_err(|e| format!("packsmith build: {e}"))?;
 
-    let ir = packsmith_compiler::compile(&graph, &target);
+    let Compilation { ir, diagnostics } = packsmith_compiler::compile(&graph, &target);
+    report_diagnostics(&diagnostics);
+    let errors = diagnostics
+        .iter()
+        .filter(|d| d.severity == Severity::Error)
+        .count();
+    if errors > 0 {
+        return Err(format!(
+            "packsmith build: {errors} error(s) in the graph; nothing written"
+        ));
+    }
+
     let tree = packsmith_emit::file_tree(&ir, &target_data)
         .map_err(|e| format!("packsmith build: {e}"))?;
     let zip = packsmith_emit::zip(&tree);
 
     let output = output
         .map(PathBuf::from)
-        .unwrap_or_else(|| default_output(&graph_path));
+        .unwrap_or_else(|| default_output(&graph.project.name));
+    check_output_dir(&output)?;
     std::fs::write(&output, &zip)
         .map_err(|e| format!("packsmith build: writing {}: {e}", output.display()))?;
     eprintln!(
@@ -117,12 +149,58 @@ fn resolve_graph_path(project: &Path) -> Result<PathBuf, String> {
     ))
 }
 
-fn default_output(graph_path: &Path) -> PathBuf {
-    let stem = graph_path
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("pack");
-    PathBuf::from(format!("{stem}.zip"))
+/// Default zip name: the project's own name, slugified. Derived from the name in
+/// the graph, not the graph file's stem, so building `graph.json` or `input.json`
+/// both produce `<project>.zip` rather than `graph.zip` / `input.zip`.
+fn default_output(project_name: &str) -> PathBuf {
+    let mut slug = String::new();
+    for ch in project_name.trim().chars() {
+        let c = match ch {
+            'A'..='Z' => ch.to_ascii_lowercase(),
+            'a'..='z' | '0'..='9' | '-' | '_' | '.' => ch,
+            _ => '-',
+        };
+        if c == '-' && slug.ends_with('-') {
+            continue;
+        }
+        slug.push(c);
+    }
+    let slug = slug.trim_matches('-');
+    PathBuf::from(format!(
+        "{}.zip",
+        if slug.is_empty() { "pack" } else { slug }
+    ))
+}
+
+/// Fail with a message that names the missing directory, rather than letting the
+/// raw "No such file or directory" from `fs::write` through.
+fn check_output_dir(output: &Path) -> Result<(), String> {
+    match output.parent() {
+        Some(parent) if !parent.as_os_str().is_empty() && !parent.is_dir() => Err(format!(
+            "packsmith build: cannot write {}: the directory {} does not exist",
+            output.display(),
+            parent.display()
+        )),
+        _ => Ok(()),
+    }
+}
+
+fn report_diagnostics(diagnostics: &[Diagnostic]) {
+    for d in diagnostics {
+        let at = match &d.address.node {
+            Some(node) => format!("{node}/{}[{}]", d.address.slot, d.address.index),
+            None => format!("root[{}]", d.address.index),
+        };
+        let severity = match d.severity {
+            Severity::Error => "error",
+            Severity::Warning => "warning",
+        };
+        let code = d.code.as_deref().unwrap_or("(uncoded)");
+        eprintln!("packsmith build: {severity} at {at}: {code}");
+        if let Some(fix) = &d.fix {
+            eprintln!("    fix: {fix}");
+        }
+    }
 }
 
 fn parse_build_args(args: &[String]) -> Result<BuildArgs, String> {
@@ -212,6 +290,32 @@ mod tests {
         assert!(run(argv(&["--help"])).is_ok());
         assert!(run(argv(&["--version"])).is_ok());
         assert!(run(argv(&[])).is_ok());
+    }
+
+    #[test]
+    fn build_help_is_supported_and_does_not_parse_the_rest() {
+        assert!(run(argv(&["build", "--help"])).is_ok());
+        assert!(run(argv(&["build", "-h"])).is_ok());
+        // No <project>, no --target, but --help still wins.
+        assert!(build(&argv(&["--help"])).is_ok());
+    }
+
+    #[test]
+    fn default_output_is_the_slugified_project_name() {
+        assert_eq!(
+            default_output("Empty Pack"),
+            PathBuf::from("empty-pack.zip")
+        );
+        assert_eq!(default_output("my:pack!"), PathBuf::from("my-pack.zip"));
+        assert_eq!(default_output("   "), PathBuf::from("pack.zip"));
+    }
+
+    #[test]
+    fn a_missing_output_directory_is_named() {
+        let err = check_output_dir(Path::new("no/such/dir/out.zip")).unwrap_err();
+        assert!(err.contains("does not exist"));
+        assert!(err.contains("dir"));
+        assert!(check_output_dir(Path::new("out.zip")).is_ok());
     }
 
     #[test]

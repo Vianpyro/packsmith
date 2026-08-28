@@ -45,5 +45,71 @@ pub struct Pack {
 }
 
 /// One thing a pack contains: a function, a tag, a recipe.
+///
+/// Empty until the one-function conformance case forces the fields
+/// (`category`, `id`, `origin`, `body`) to be modelled against a real
+/// consumer (ROADMAP Phase 1).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Resource {}
+
+/// The stable address of a statement: the node owning the slot, the slot name,
+/// and the zero-based index within it (`spec/ir.schema.json`
+/// `$defs/statement-address`). `node` is `None` when the statement sits in the
+/// graph's own top-level `root` slot.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StatementAddress {
+    pub node: Option<String>,
+    pub slot: String,
+    pub index: u32,
+}
+
+/// How much a [`Diagnostic`] matters. `warning` never blocks a build; `error`
+/// always does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Severity {
+    Error,
+    Warning,
+}
+
+/// One compiler diagnostic, as a value. Diagnostics are collected and returned
+/// as a set rather than raised on the first failure, so the editor can show
+/// every problem at once (`.claude/rules/rust.md`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Diagnostic {
+    /// Stable machine code, e.g. `legacy-execute-syntax`. `None` marks a
+    /// condition the compiler recognises but has not assigned a code to yet;
+    /// the conformance contract reads `null` the same way
+    /// (`.claude/rules/spec.md`).
+    pub code: Option<String>,
+    pub severity: Severity,
+    /// Where in the graph the diagnostic points.
+    pub address: StatementAddress,
+    /// A concrete suggested edit, phrased in game terms first (ADR-0009).
+    /// `None` when the compiler has no actionable suggestion.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub fix: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_diagnostic_serialises_with_a_lowercase_severity_and_omits_an_absent_fix() {
+        let d = Diagnostic {
+            code: None,
+            severity: Severity::Warning,
+            address: StatementAddress {
+                node: None,
+                slot: "root".to_string(),
+                index: 0,
+            },
+            fix: None,
+        };
+        let json = serde_json::to_string(&d).expect("serialises");
+        assert!(json.contains(r#""severity":"warning""#));
+        assert!(json.contains(r#""node":null"#));
+        assert!(!json.contains("fix"));
+    }
+}
