@@ -9,3 +9,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+# This crate is the IR's (de)serialization: serde is the payload, not a
+# convenience, and the std has no JSON reader or writer.
+serde = { workspace = true }
+serde_json = { workspace = true }

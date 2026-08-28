@@ -7,6 +7,7 @@
 //! conformance suite. `sync-target` regenerates a target's derived data file
 //! from a pinned mcmeta commit (ADR-0014).
 
+mod conformance;
 mod sync_target;
 
 use std::path::{Path, PathBuf};
@@ -77,11 +78,26 @@ fn ci() -> ExitCode {
         }
     }
 
-    eprintln!("xtask ci: conformance");
-    match check_conformance(&repo_root().join("conformance/cases")) {
-        Ok(count) => eprintln!("xtask ci: conformance OK ({count} cases)"),
+    let cases_dir = repo_root().join("conformance/cases");
+
+    eprintln!("xtask ci: conformance (structure)");
+    match check_conformance(&cases_dir) {
+        Ok(count) => eprintln!("xtask ci: conformance structure OK ({count} cases)"),
         Err(problems) => {
-            eprintln!("xtask ci: conformance failed");
+            eprintln!("xtask ci: conformance structure failed");
+            for p in &problems {
+                eprintln!("  {p}");
+            }
+            return ExitCode::FAILURE;
+        }
+    }
+
+    eprintln!("xtask ci: conformance (build + reproducibility)");
+    match conformance::run_verified_cases(&cases_dir) {
+        Ok(0) => eprintln!("xtask ci: no verified cases to build yet"),
+        Ok(count) => eprintln!("xtask ci: conformance builds OK ({count} cases, hashes match)"),
+        Err(problems) => {
+            eprintln!("xtask ci: conformance builds failed");
             for p in &problems {
                 eprintln!("  {p}");
             }
@@ -93,7 +109,7 @@ fn ci() -> ExitCode {
     ExitCode::SUCCESS
 }
 
-fn run_cargo(args: &[&str]) -> bool {
+pub(crate) fn run_cargo(args: &[&str]) -> bool {
     let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
     Command::new(cargo)
         .args(args)
@@ -103,7 +119,7 @@ fn run_cargo(args: &[&str]) -> bool {
         .unwrap_or(false)
 }
 
-fn repo_root() -> PathBuf {
+pub(crate) fn repo_root() -> PathBuf {
     // The xtask crate sits one level below the workspace root.
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()

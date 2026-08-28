@@ -27,18 +27,40 @@ version = "0.1.0"
 [[package]]
 name = "packsmith-cli"
 version = "0.1.0"
+dependencies = [
+ "packsmith-compiler",
+ "packsmith-emit",
+ "packsmith-mcversion",
+ "serde_json",
+]
 
 [[package]]
 name = "packsmith-compiler"
 version = "0.1.0"
+dependencies = [
+ "packsmith-ir",
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "packsmith-emit"
 version = "0.1.0"
+dependencies = [
+ "packsmith-ir",
+ "packsmith-mcversion",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
 
 [[package]]
 name = "packsmith-ir"
 version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "packsmith-mcversion"
