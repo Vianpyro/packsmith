@@ -45,9 +45,5 @@ pub struct Pack {
 }
 
 /// One thing a pack contains: a function, a tag, a recipe.
-///
-// ponytail: no resource is modeled yet. The empty-pack conformance case emits
-// none; the fields (`category`, `id`, `origin`, `body`) land with the
-// one-function case (ROADMAP Phase 1), against a real consumer.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Resource {}

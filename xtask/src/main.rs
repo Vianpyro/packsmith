@@ -131,10 +131,6 @@ pub(crate) fn repo_root() -> PathBuf {
 /// `input.json`, `target.json`, `README.md`, and exactly one expected result
 /// (`expected/` for a successful build, `expected-diagnostics.json` for a
 /// compile failure). Returns the case count on success.
-///
-// ponytail: structure only. The full run - build each case and diff the tree -
-// needs the compiler, which does not exist until Phase 1. Wire it in here then
-// (ROADMAP Phase 1), alongside the reproducibility check.
 fn check_conformance(cases_dir: &Path) -> Result<usize, Vec<String>> {
     let mut names: Vec<String> = match std::fs::read_dir(cases_dir) {
         Ok(entries) => entries

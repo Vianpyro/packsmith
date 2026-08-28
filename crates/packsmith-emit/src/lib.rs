@@ -38,9 +38,6 @@ pub fn file_tree(ir: &Ir, target: &TargetData) -> Result<FileTree, EmitError> {
                 })?;
         let meta = PackMcmeta::new(pack.description.clone(), format);
         tree.insert("pack.mcmeta".to_string(), meta.to_bytes());
-        // ponytail: resources are not modeled yet (packsmith-ir). When they are,
-        // each lands at `<root>/<namespace>/<category dir>/<path>.<ext>` from
-        // target data, and the tree stays sorted for free.
     }
     Ok(tree)
 }
@@ -116,10 +113,6 @@ pub fn zip(tree: &FileTree) -> Vec<u8> {
 /// `pack.mcmeta` in the modern shape: `min_format` / `max_format` as
 /// `[major, minor]` pairs, required since 25w31a / 1.21.9
 /// (`.claude/rules/minecraft.md`). Both bracket the exact requested target.
-///
-// ponytail: only the modern shape. The legacy single-integer `pack_format`
-// shape, and choosing between the two from target data, is Phase 2 work
-// (ROADMAP): no target this compiler supports needs it.
 #[derive(Serialize)]
 struct PackMcmeta {
     pack: PackSection,

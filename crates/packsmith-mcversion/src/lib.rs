@@ -167,10 +167,6 @@ impl TargetData {
 
     /// The Brigadier command tree, as published by mcmeta with the non-grammar
     /// `permissions` fields removed.
-    ///
-    // ponytail: returned as a `serde_json::Value`, not a typed tree. The command
-    // validator (ADR-0012, ROADMAP Phase 1) is what defines the shape it needs;
-    // model it then, against a real consumer, not now.
     pub fn commands(&self) -> &serde_json::Value {
         &self.commands
     }

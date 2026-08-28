@@ -5,10 +5,6 @@
 //! Phase 1 slice: lower a project with an empty `root` slot to the IR for a
 //! single `data` pack carrying the project description. An empty `root` is a
 //! valid, silent program, not an error (ADR-0016).
-//!
-// ponytail: no block resolution, no graph validation, no statement lowering.
-// A non-empty `root` is accepted and ignored here; the one-function conformance
-// case is what forces statements to be modeled (ROADMAP Phase 1).
 
 use serde::Deserialize;
 
