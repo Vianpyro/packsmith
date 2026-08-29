@@ -12,6 +12,8 @@ Execute task **$1** from `docs/TASKS.md`.
    and exit criterion.
 3. Read every ADR the task lists, from `docs/adr/`.
 4. If the task depends on an item still marked `OPEN` in `docs/OPEN-QUESTIONS.md`, stop and ask.
+5. Set the task's `**Status.**` line in `docs/TASKS.md` to `In progress` before the first
+   change.
 
 ## While working
 
@@ -31,7 +33,17 @@ Execute task **$1** from `docs/TASKS.md`.
 - **The exit criterion is marked 🔒**, or otherwise needs a real game instance, a JDK plus
   server jar, an EULA acceptance, or a judgement no test in this repo can make. Do the code
   work up to that line, then stop and report exactly what the maintainer must check. Do not
-  assume it passed.
+  assume it passed. Leave the `**Status.**` line at `In progress`; never mark a 🔒 criterion
+  `done` yourself.
+
+## On finishing
+
+Update the task's `**Status.**` line in `docs/TASKS.md`:
+
+- `Done` only when the exit criterion is actually met. If it is 🔒, or otherwise needs the
+  maintainer's confirmation, it is not done until the maintainer confirms — leave it
+  `In progress` and report what they must check.
+- `Blocked on <what>` if a stop condition was hit.
 
 ## When the exit criterion is fully machine-checkable
 

@@ -3,19 +3,23 @@
 One numbered task per unit of work. Each task states its goal, the ADRs that govern it, its
 exact scope, what is explicitly out of scope, and the one condition that closes it.
 
-Tasks 1-9 are backfilled from git history: they record what was actually done, not a plan.
-Tasks 10 onward come from `docs/ROADMAP.md` and are not yet started.
+Tasks 1-10 are backfilled from git history: they record what was actually done, not a plan.
+Task 11 onward are planned; from task 12 they come straight from `docs/ROADMAP.md`.
 
-A task is executed with `/task <n>`. That command reads this file, reads every ADR the task
-lists, and works only inside the stated scope.
+Every task carries a `**Status.**` line: `done`, `in progress`, `not started`, or
+`blocked on <what>`. A task is executed with `/task <n>`. That command reads this file, reads
+every ADR the task lists, works only inside the stated scope, and keeps the `**Status.**` line
+current.
 
 **🔒 marks an exit criterion only the maintainer can check** — it needs a real game instance,
 a JDK, or a judgement call that no test in this repo can make. `/task` stops and reports when
-it reaches one of these rather than assuming success.
+it reaches one of these rather than assuming success, and never marks the task `done`.
 
 ---
 
 ## 1. Repository bootstrap and the decision record
+
+**Status.** Done.
 
 **Goal.** Stand up the repository as a specification project: the working agreement, the
 vocabulary, the phase gates, and the architecture decisions everything else answers to.
@@ -43,6 +47,8 @@ gates in `ROADMAP.md` are written.
 
 ## 2. Port type system, sequencing model, and CI gate
 
+**Status.** Done.
+
 **Goal.** Fix how the graph expresses order and what a port may carry, before any schema
 depends on it.
 
@@ -56,7 +62,7 @@ types), 0003 (graph and IR are data), 0007 (deterministic builds).
 - `cargo xtask ci` wired to fmt check, clippy with warnings denied, and workspace tests.
 - `cargo-deny` configuration for licences and advisories.
 
-**Out of scope.** The schemas themselves (task 3). Command grammar (task 10).
+**Out of scope.** The schemas themselves (task 3). Command grammar (task 12).
 
 **Exit criterion.** `spec/types.md` describes every port type and the sequencing rule; ADR-0016
 is accepted; `cargo xtask ci` runs the three cargo steps.
@@ -64,6 +70,8 @@ is accepted; `cargo xtask ci` runs the three cargo steps.
 ---
 
 ## 3. Normative schemas
+
+**Status.** Done.
 
 **Goal.** Publish the contract between the compiler, every SDK, and every host as versioned,
 language-agnostic schemas.
@@ -89,6 +97,8 @@ pack-kind expressed as a JSON Schema `enum`.
 
 ## 4. Initial conformance cases
 
+**Status.** Done.
+
 **Goal.** Give the contract teeth: golden `(graph, target) -> file tree` cases covering the
 Phase 0 surface.
 
@@ -111,6 +121,8 @@ success cases carry a placeholder, the failure case carries `expected-diagnostic
 ---
 
 ## 5. Compile-failure cases and the structural checker
+
+**Status.** Done.
 
 **Goal.** Let a conformance case assert a precise compile failure, and check every case is
 well-formed without needing a working compiler.
@@ -136,6 +148,8 @@ documented in `conformance/README.md` and mirrored in `.claude/rules/spec.md`.
 
 ## 6. Target data pipeline
 
+**Status.** Done.
+
 **Goal.** Extract the thin functional subset of Minecraft 26.2 data and load it at runtime,
 with no version fact anywhere in the compiler.
 
@@ -155,7 +169,7 @@ model).
 - `LICENSES/LicenseRef-Minecraft-Derived.txt`, `REUSE.toml`, `deny.toml` and `.gitattributes`
   updates, CI `reuse lint-file` scoped to the data directory.
 
-**Out of scope.** Using the command tree for validation (task 10). A second target (task 12).
+**Out of scope.** Using the command tree for validation (task 12). A second target (task 14).
 
 **Exit criterion.** `cargo xtask sync-target --version 26.2 --check` passes on CI with
 byte-identical output; `26.2.json` carries the provenance header and SPDX marker;
@@ -164,6 +178,8 @@ byte-identical output; `26.2.json` carries the provenance header and SPDX marker
 ---
 
 ## 7. Compiler / emitter / CLI vertical slice for the empty pack
+
+**Status.** Done.
 
 **Goal.** Take one conformance case end to end — graph in, deterministic `.zip` out — and
 build the runner that proves it.
@@ -185,7 +201,7 @@ is the gate for a tree), 0012 (diagnostics carry node id and, where possible, a 
   fail if every buildable case is a placeholder.
 - `docs/adr/0017-in-game-verification.md`, `docs/adr/0018-store-only-zip.md`.
 
-**Out of scope.** Functions, tags, recipes, loot tables (task 8). Command validation (task 10).
+**Out of scope.** Functions, tags, recipes, loot tables (task 8). Command validation (task 12).
 
 **Exit criterion.** `cargo xtask ci` builds `empty-pack` twice to identical bytes and matches
 its verified `expected/` tree.
@@ -193,6 +209,8 @@ its verified `expected/` tree.
 ---
 
 ## 8. Lower functions, tags, recipes, and loot tables
+
+**Status.** Done.
 
 **Goal.** Turn the remaining Phase 0 case graphs into IR and emitted files through built-in
 declarative blocks.
@@ -214,7 +232,7 @@ in game and mark the shape with greppable constants).
   block output shapes.
 
 **Out of scope.** A systematic type / cross-reference / root-placement validation pass (see
-`docs/BACKLOG.md`). The mcdoc schema validator (task 15). Command grammar (task 10).
+`docs/BACKLOG.md`). The mcdoc schema validator (task 17). Command grammar (task 12).
 
 **Exit criterion.** `one-function`, `function-tag`, `recipe`, `loot-table` lower to IR and emit
 the expected files; hand-guessed JSON shapes sit behind constants pointing at ADR-0019.
@@ -222,6 +240,8 @@ the expected files; hand-guessed JSON shapes sit behind constants pointing at AD
 ---
 
 ## 9. In-game verification of the Phase 0 trees
+
+**Status.** Done — the 🔒 in-game verification was carried out and confirmed by the maintainer.
 
 **Goal.** Replace the placeholder expected trees with ones a real 26.2 client has accepted.
 
@@ -236,7 +256,7 @@ judging it plausible), 0019 (same gate for block output shapes until the validat
 - Write the confirmed file trees into each `expected/`, delete the `PLACEHOLDER.md` files.
 - `.vscode/tasks.json` entries to build the test datapacks.
 
-**Out of scope.** `raw-mcfunction` (waits on command grammar, task 10) and
+**Out of scope.** `raw-mcfunction` (waits on command grammar, task 12) and
 `legacy-syntax-rejected` (a diagnostics case, no tree).
 
 **Exit criterion. 🔒** Each of the five trees has been loaded in Java Edition 26.2 with no
@@ -245,7 +265,91 @@ removed. No test in this repo can stand in for this.
 
 ---
 
-## 10. Command grammar validation
+## 10. The graph validation pass
+
+**Status.** Done.
+
+**Goal.** Check a graph's shape before lowering — unknown blocks, missing or ill-typed inputs,
+misplaced nodes, broken data edges — and give every failure a stable code an SDK or host can
+assert on.
+
+**Governing ADRs.** 0009 (the diagnostic names the game concept before the file path), 0012
+(command and selector grammar is a separate stage, not this pass), 0016 (statement addresses;
+ordered slots hold statements, not values).
+
+**Scope.**
+- `spec/diagnostics.md`: the diagnostic code namespace (`block-`, `input-`, `slot-`, `edge-`),
+  the fields a diagnostic carries, which are asserted by conformance (`code`, `severity`,
+  `address`) and which are recorded only (`message`, `fix`), anchoring rules, and the
+  `command-` codes reserved for the Brigadier stage.
+- `packsmith-ir::codes`: the Rust mirror of the codes the pass emits, kept in step with
+  `spec/diagnostics.md`.
+- `packsmith-ir`: `Diagnostic` carries an optional `code`, a `severity`, an `address`, and a
+  recorded `message` and `fix`.
+- `packsmith-compiler::validate`: one pass over the graph, collecting every diagnostic rather
+  than bailing on the first; wired into `compile` so a graph with an error is not lowered and
+  a diagnostic is reported from one place.
+- `packsmith-blocks::describe`: the port and slot shape of each built-in, so the pass knows
+  what a node requires.
+- Seven diagnostics conformance cases — `unknown-block`, `missing-required-input`,
+  `input-type-mismatch`, `id-missing-namespace`, `command-at-root`, `edge-to-missing-node`,
+  `edge-forward-reference` — each with an `expected-diagnostics.json`, run Rust-side by
+  `crates/packsmith-compiler/tests/conformance_diagnostics.rs`.
+
+**Out of scope.** Command and selector grammar (task 12). Registry membership and block
+property values — behind target data that may not exist for a given registry. The semantic
+data-edge checks (edge source must be a value node, endpoint types must be assignable,
+slot-scoped output visibility, a port holds a literal or an edge but not both), deferred until
+a value block exists to exercise them (`docs/BACKLOG.md`).
+
+**Exit criterion.** `cargo xtask ci` green; every diagnostics conformance case produces the
+`code`, `severity`, and `address` its `expected-diagnostics.json` asserts; `spec/diagnostics.md`
+and `packsmith-ir::codes` list the same codes.
+
+---
+
+## 11. Close the gaps the validation pass left open
+
+**Status.** Not started.
+
+**Goal.** Close three gaps opened by the validation pass before the diagnostic set grows.
+
+**Governing ADRs.** 0009 (the diagnostic names the game concept before the file path), 0016 (an
+invalid ordering is unrepresentable in the editor). Also bound by `spec/diagnostics.md` and
+`spec/block-manifest.schema.json`.
+
+**Scope.**
+- `packsmith-blocks::describe` returns `BlockDescriptor`, a second definition of what a block
+  port is alongside `block-manifest.schema.json`. Add a test that serialises every built-in
+  descriptor and validates it against that schema. If a built-in cannot be expressed in the
+  format out-of-tree blocks will have to use, the format is wrong and we want to know now, not
+  in Phase 3.
+- Diagnostic messages are assembled from English fragments, with capitalisation carried by
+  substitution. That does not translate, and the audience is a mostly non-English community
+  with a total-beginner persona. Change `Diagnostic` to carry its code plus typed structured
+  parameters instead of a rendered sentence; render messages from a template table keyed by
+  code. Keep the English templates in the repo; change nothing else about the wording yet.
+  Conformance cases may then assert on parameters as well as `code`, `severity`, and `address`.
+- `slot-rejects-block` names `packsmith/command` in user-facing text. Give `BlockDescriptor` a
+  display name and use it, so the diagnostic names the game concept first (ADR-0009).
+- Reword `block-unknown` to "There's no block called ...", replace "a set of fields" with
+  wording that is not jargon in disguise, and name the block in `input-missing` so the CLI
+  message is locatable.
+- Rewrite the `edge-forward-reference` and `edge-cycle` messages for a technical reader rather
+  than a beginner: per ADR-0016 an invalid ordering is unrepresentable in the editor, so those
+  conditions are only reachable by hand-editing or the CLI. A beginner who sees one has hit an
+  editor bug.
+
+**Out of scope.** Command grammar validation (task 12). Any actual translation. Any new
+diagnostic code.
+
+**Exit criterion.** `cargo xtask ci` green; no rendered sentence is stored on a `Diagnostic`.
+
+---
+
+## 12. Command grammar validation
+
+**Status.** Not started.
 
 **Goal.** Validate every command string against the target's extracted Brigadier tree, as a
 compiler stage with real diagnostics — the last Phase 1 code work.
@@ -268,7 +372,7 @@ file path).
   produces the diagnostics its `expected-diagnostics.json` asserts.
 
 **Out of scope.** A structured (AST) command form — the IR form is tagged so it can be added
-later without a schema break. Rewriting commands across targets. JSON shape validation (task 15).
+later without a schema break. Rewriting commands across targets. JSON shape validation (task 17).
 
 **Exit criterion.** `legacy-syntax-rejected` produces the asserted diagnostics and
 `raw-mcfunction` builds, both under `cargo xtask ci`; pasting 1.16-era syntax into a raw block
@@ -278,7 +382,9 @@ no compatibility warning and its functions to run — `/task` stops and reports 
 
 ---
 
-## 11. In-game verification harness (GameTest)
+## 13. In-game verification harness (GameTest)
+
+**Status.** Not started.
 
 **Goal.** Prove the game accepts a generated pack, from `xtask`, using vanilla headless
 GameTest — no mod loader.
@@ -307,7 +413,9 @@ in a dedicated CI job.
 
 ---
 
-## 12. Second and third targets
+## 14. Second and third targets
+
+**Status.** Not started.
 
 **Goal.** Extract two more releases and prove the same graph compiles for all three.
 
@@ -318,12 +426,12 @@ and pack-kind differences between targets are absorbed by data).
 
 **Scope.**
 - `cargo xtask sync-target` for two further releases, one of them old enough to need the
-  legacy single-integer `pack_format` (task 14).
+  legacy single-integer `pack_format` (task 16).
 - `crates/packsmith-mcversion/data/<v>.json` for each, with headers and SPDX markers.
 - Version parser handling both version-string shapes.
 - A conformance case, or a runner mode, that builds one graph for all three targets.
 
-**Out of scope.** Cross-block constraint resolution (task 13). Retargeting a command string
+**Out of scope.** Cross-block constraint resolution (task 15). Retargeting a command string
 between versions (best-effort per ADR-0012, not automated here).
 
 **Exit criterion.** One graph compiles for all three targets under `cargo xtask ci`, each
@@ -333,7 +441,9 @@ the CI check only proves the bytes are well-formed.
 
 ---
 
-## 13. Cross-block constraint resolution
+## 15. Cross-block constraint resolution
+
+**Status.** Not started.
 
 **Goal.** Resolve target-compatibility constraints across all blocks in a graph and name the
 block that breaks a build.
@@ -359,7 +469,9 @@ coverage.
 
 ---
 
-## 14. Both `pack.mcmeta` shapes
+## 16. Both `pack.mcmeta` shapes
+
+**Status.** Not started.
 
 **Goal.** Emit the legacy single-integer `pack_format` for old targets and the modern
 `min_format` / `max_format` range from 1.21.9 on.
@@ -372,7 +484,7 @@ coverage.
 - Legacy shape: bare-integer `pack_format`.
 - Modern shape: `min_format` as an integer or `[major, minor]` pair, `max_format` as a bare
   major meaning any minor of that major.
-- A conformance case per shape, tied to targets from task 12.
+- A conformance case per shape, tied to targets from task 14.
 
 **Out of scope.** Resource-pack format numbers beyond what the data carries (resource packs
 are post-v1, ADR-0010).
@@ -383,7 +495,9 @@ shape, each pinned by a conformance case under `cargo xtask ci`.
 
 ---
 
-## 15. Emitted-JSON shape validation (mcdoc)
+## 17. Emitted-JSON shape validation (mcdoc)
+
+**Status.** Blocked on ADR-0019 (proposed; the task implements it only once accepted).
 
 **Goal.** Stop trusting the block that produced a JSON object; check the object against the
 target's data-pack schemas.
