@@ -18,12 +18,6 @@ widening the scope of the task in front of you. Nothing here is committed to.
   the built-ins' real supported range has to be decided; revisit then.
 - Schema validation in CI: `cargo xtask ci` should validate every conformance `input.json`
   against `spec/graph.schema.json`, and the schemas themselves against draft 2020-12.
-- The raw-mcfunction escape hatch (conformance case `raw-mcfunction`) needs a string format
-  for a whole function file — split on newlines, skip blank and `#`-comment lines, validate
-  the rest as commands. `spec/types.md` section 4.4 already makes formats open and
-  target-data-supplied, but the section 7 coverage row for `function` lists only
-  `string(command)` and `string(selector)`. Either add the file-level format to that row or
-  decide the escape hatch is `list<string(command)>` and adjust the conformance case.
 - `conformance/` has no schema for `target.json`. The cases currently use `{ "id": "26.2" }`,
   matching the `target` object in `ir.schema.json`. Worth a one-object schema so the runner
   can reject a malformed target.
@@ -55,6 +49,12 @@ widening the scope of the task in front of you. Nothing here is committed to.
   (section 2.4), and a port holds a literal or an edge but not both. Codes are reserved in
   `spec/diagnostics.md`; `packsmith-compiler::validate` checks only edge structure today
   (unknown node, forward reference, cycle).
+- `CLAUDE.md` still says "Current phase: Phase 0 (specification). No implementation code yet."
+  Tasks 6-11 are Phase 1 implementation and are done. Update the marker once the Phase 1 gate
+  (task 12's 🔒) is confirmed.
+- The `xtask` conformance runner only builds cases with a verified `expected/` tree; a case on
+  `PLACEHOLDER.md` is never even built, so a build regression in it is caught only by whatever
+  Rust test exercises it. Consider a "build succeeds, tree unchecked" tier in the runner.
 - Generate `test_instance` and `test_environment` assets for a user's own pack, so Packsmith
   can emit tests for the pack it just built. Unscheduled, out of v1 scope. Under ADR-0010 the
   pack model is open: `test_instance` and `test_environment` are registry categories like any

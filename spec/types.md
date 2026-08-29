@@ -193,8 +193,15 @@ Formats defined by v1 target data:
 | `plain` | arbitrary text | length only |
 | `command` | one command line, no leading slash | the target's command grammar (ADR-0012) |
 | `selector` | an entity selector | the target's command grammar, entity-argument production |
+| `mcfunction` | a whole function file: newline-separated lines | split on newlines; blank and `#`-comment lines pass through untouched, every other line is validated as `command` |
 
-**Literal:** `"say hello"`, `"@e[type=minecraft:zombie,limit=1]"`.
+The `mcfunction` format is the escape hatch: when no block fits, a `string(mcfunction)` port
+takes a hand-written function file whole. The passthrough is byte-exact so the build stays
+deterministic (ADR-0007), and dropping to raw text does not drop validation — every command
+line in it is still checked (ADR-0012, OPEN-QUESTIONS A4).
+
+**Literal:** `"say hello"`, `"@e[type=minecraft:zombie,limit=1]"`,
+`"# a note\nsay first\n\nsay second\n"`.
 
 **Connects to:** a `string` port of the same format, or a `string` port of format `plain`.
 A `plain` value MUST NOT flow into a `command` or `selector` port: validation happens where
@@ -428,7 +435,7 @@ beyond them.
 
 | Category | Types it needs |
 |---|---|
-| `function` | `body`, `string(command)`, `string(selector)`, `id` |
+| `function` | `body`, `string(command)`, `string(selector)`, `string(mcfunction)`, `id` |
 | tags | `list<id>`, `id`, `bool` |
 | `recipe` | `item_stack`, `id`, `list<id>`, `int`, `float` |
 | `loot_table` | `id`, `item_stack`, `int`, `float`, `list` |

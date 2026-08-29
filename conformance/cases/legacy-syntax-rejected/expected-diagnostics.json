@@ -2,9 +2,10 @@
   "outcome": "compile-failure",
   "diagnostics": [
     {
-      "code": null,
+      "code": "command-legacy-syntax",
       "severity": "error",
       "address": { "node": "fn-legacy", "slot": "body", "index": 0 },
+      "params": { "selector": "@e[type=zombie]" },
       "message": "execute no longer takes a bare selector and position; write `execute as @e[type=zombie] at @s run say boo`"
     }
   ]

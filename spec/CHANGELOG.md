@@ -37,6 +37,17 @@ The format is loosely [Keep a Changelog]. Dates are the date the change landed.
 
 ### Changed
 
+- `diagnostics.md`: the command-grammar stage (ADR-0012) landed. `command-invalid` and
+  `command-legacy-syntax` moved from reserved to emitted: after lowering, each IR command line
+  is walked against the target's pruned Brigadier tree, blank and `#`-comment lines skipped,
+  and a token that can match no child stops the build. Best-effort — argument-parser internals
+  (selectors, NBT, block states) are not reimplemented, and a valid command is never reported
+  invalid. `conformance/cases/legacy-syntax-rejected` now pins `command-legacy-syntax`.
+- `types.md`: added the `string` format `mcfunction` — a whole function file, split on
+  newlines, blank and `#`-comment lines passed through byte-exact, every other line validated
+  as `command`. Added to the `function` category coverage row. This is the raw-mcfunction
+  escape hatch (OPEN-QUESTIONS A4); it adds no type and no subsystem.
+
 - `diagnostics.md`: a diagnostic no longer carries a rendered `message`/`fix`. It carries
   `params` — a flat map to a string, whole number, or string list — and the wording is
   produced from `code` plus `params` by one per-code template table, the unit a translation

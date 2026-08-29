@@ -3,7 +3,7 @@
 - **Spec version:** 0 (unstable; Phase 0)
 - **Status:** normative
 - **Constrained by:** ADR-0009 (who reads these), ADR-0012 (command grammar is a
-  separate stage), ADR-0016 (statement addresses).
+  separate stage, now landed), ADR-0016 (statement addresses).
 - **Licence:** `MIT OR Apache-2.0`, as all of `spec/`.
 
 A **diagnostic** is a structured, user-facing result the compiler produces when a
@@ -48,7 +48,7 @@ Codes are grouped by a prefix that names the part of the graph at fault:
 | `input-` | the value on an input port |
 | `slot-` | a node's place in a slot |
 | `edge-` | a data edge |
-| `command-` | a command string's grammar — **owned by the Brigadier stage (ADR-0012)**, listed below but not emitted by the validation pass |
+| `command-` | a command string's grammar — **owned by the command-grammar stage (ADR-0012)**, emitted after lowering, not by the validation pass |
 
 `code: null` in a conformance case marks a condition the compiler recognises but
 has not assigned a code to yet. It stays satisfied until a real code replaces it,
@@ -80,9 +80,10 @@ that *receives* the value, falling back to the source node, then to
 
 ### Deliberately not checked here
 
-- **Command and selector grammar.** `string` values of format `command` or
-  `selector` are handed to the extracted Brigadier tree for the target
-  (ADR-0012). That stage owns the `command-` codes and is a separate task.
+- **Command and selector grammar.** `string` values of format `command`,
+  `selector`, or `mcfunction` are handed to the extracted Brigadier tree for the
+  target (ADR-0012). That is the command-grammar stage below; it runs after
+  lowering, over the IR command lines, not in this pass.
 - **Registry membership and block properties.** `spec/types.md` sections 4.5 and
   4.6 put these behind target data that may not exist for a given registry;
   syntax is checked here, membership is not.
@@ -91,16 +92,33 @@ that *receives* the value, falling back to the source node, then to
   `$defs/edge`). No built-in block is a value node, so v1 graphs have no edges
   that reach a port; these activate with the first value block.
 
-## Reserved: `command-` codes
+## Codes emitted by the command-grammar stage
 
-Declared here so a conformance case can reference one and so the validation pass
-does not reuse the prefix. Emitted by the command-grammar stage, not by this
-pass.
+This stage runs after lowering, over the IR command lines (`Body.commands`),
+walking the pruned Brigadier tree from target data (ADR-0012, ADR-0006). It never
+touches the graph directly. Blank lines and `#`-comment lines are skipped, as the
+game skips them. On any error the pack is not emitted, exactly as a validation
+error stops the build.
 
-| Code | Severity | Condition |
-|---|---|---|
-| `command-invalid` | error | A `command` or `selector` string does not parse against the target's Brigadier tree. |
-| `command-legacy-syntax` | error | A `command` string is valid for an older release but not the target: `execute` with a bare selector and position, a removed argument, a renamed subcommand. This is the returning-creator failure mode of ADR-0009. |
+Best-effort by design (ADR-0012): the stage checks a line against the shape of
+the command tree — literal spelling, subcommand structure, whether the line is
+complete — and reports only when a token can match no child at all. It does not
+reimplement every argument parser (entity selectors, NBT, block states), so a
+malformed *argument* inside an otherwise well-formed command can pass. It never
+reports a valid command as invalid.
 
-Until that stage lands, a case that means to assert one of these uses `code: null`
-(see `conformance/cases/legacy-syntax-rejected`).
+| Code | Severity | Condition | Fix knowable? |
+|---|---|---|---|
+| `command-invalid` | error | A command line does not parse against the target's Brigadier tree: an unknown command, a misspelled subcommand, a line that stops before it is complete. | sometimes — name the token the game rejected |
+| `command-legacy-syntax` | error | A command line is a recognisable older form that the target no longer accepts — today, `execute` followed directly by a selector or a `~`/`^` position, the pre-1.13 form. This is the returning-creator failure mode of ADR-0009. | yes — show the modern shape |
+
+Anchoring: a `command-*` diagnostic points at the statement address the command
+line was lowered from — the `packsmith/command` node inside its function body,
+or `(<mcfunction node>, "source", <line index>)` for a line inside a raw function
+file.
+
+Parameters: `command` (the offending line) is recorded on both. `command-invalid`
+also records `token` (the word the walk rejected, absent when the whole line is
+unknown). `command-legacy-syntax` records `selector` (the token that gave it
+away). Only `code`, `severity`, and `address` are asserted by conformance;
+`conformance/cases/legacy-syntax-rejected` pins `command-legacy-syntax`.

@@ -36,10 +36,10 @@ case replaces `expected/` with a single file, `expected-diagnostics.json`:
   "outcome": "compile-failure",
   "diagnostics": [
     {
-      "code": null,
+      "code": "command-legacy-syntax",
       "severity": "error",
       "address": { "node": "fn-legacy", "slot": "body", "index": 0 },
-      "params": { "from": "1.16" },
+      "params": { "selector": "@e[type=zombie]" },
       "message": "execute no longer takes a bare selector and position; write `execute as <targets> at @s run <command>`"
     }
   ]
