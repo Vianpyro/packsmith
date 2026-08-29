@@ -21,6 +21,17 @@ use serde_json::{Map, Value, json};
 
 use packsmith_ir::{Body, Command, Diagnostic, Resource, Severity, StatementAddress};
 
+/// Minecraft version facts about the JSON a built-in block emits. These are shapes
+/// written from memory, which `.claude/rules/minecraft.md` forbids; they are named
+/// here so they are greppable when the schema validator of ADR-0019 lands and can
+/// check emitted JSON against the target instead of trusting these literals.
+mod target_shape {
+    /// `type` of a shapeless crafting recipe (`recipe` category).
+    pub const CRAFTING_SHAPELESS_RECIPE: &str = "minecraft:crafting_shapeless";
+    /// `type` of a loot pool entry that yields a fixed item (`loot_table` category).
+    pub const LOOT_ITEM_ENTRY: &str = "minecraft:item";
+}
+
 /// One instance of a block in the graph (`spec/graph.schema.json` `$defs/node`).
 /// `inputs` and `slots` are captured loosely; the type each input must hold is
 /// the block's business, checked (later) against the block manifest.
@@ -176,7 +187,7 @@ fn lower_crafting_shapeless(node: &Node, at: StatementAddress, out: &mut Lowered
     };
 
     let value = json!({
-        "type": "minecraft:crafting_shapeless",
+        "type": target_shape::CRAFTING_SHAPELESS_RECIPE,
         "ingredients": ingredients,
         "result": item_stack_json(&result),
     });
@@ -203,7 +214,7 @@ fn lower_loot_table(node: &Node, at: StatementAddress, out: &mut Lowered) {
     let entries: Vec<Value> = drops
         .iter()
         .filter_map(|d| d.get("item").and_then(Value::as_str))
-        .map(|item| json!({ "type": "minecraft:item", "name": item }))
+        .map(|item| json!({ "type": target_shape::LOOT_ITEM_ENTRY, "name": item }))
         .collect();
 
     out.resources.push(Resource {

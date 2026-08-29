@@ -2,6 +2,7 @@
 paths:
   - 'crates/packsmith-mcversion/**'
   - 'crates/packsmith-emit/**'
+  - 'crates/packsmith-blocks/**'
   - 'xtask/**'
 ---
 
@@ -42,6 +43,16 @@ provenance header: source URL, upstream commit SHA, mcmeta version id, extractio
 hash. CI re-runs the extractor and requires byte-identical output.
 
 Load target data at runtime from a file. Never `include_str!` derived data into a binary.
+
+## Declarative block output shapes
+
+A declarative block's output shape is a version fact like any other. The recipe type string,
+the ingredient and result shapes, the loot entry shape -- every key and every literal in the
+JSON a built-in block emits belongs to a specific target's format and moves between releases.
+Do not write those from memory in `crates/packsmith-blocks`. Until the schema validator lands
+(ADR-0019), a built-in block's shape is verified against a running game before its conformance
+case is marked passing (ADR-0017), and the greppable constants pointing at ADR-0019 mark where
+the shape knowledge sits.
 
 ## Facts that shape the code
 
