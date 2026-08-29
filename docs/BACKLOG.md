@@ -35,9 +35,18 @@ widening the scope of the task in front of you. Nothing here is committed to.
 - `packsmith/loot-table` drops the `count` on an `item_stack` drop entirely (the one case has
   no count). Carry it through — as `minecraft:set_count` or the entry's own field, whichever
   the target schema wants — once that schema is available.
-- `packsmith/function-tag`, `crafting-shapeless`, `loot-table` are top-level statement nodes
-  but nothing checks a `command` block is not placed at root, or that a `function` `body`
-  child is a statement not a value node. That is the systematic validation pass.
+- The `xtask` conformance runner does not execute `expected-diagnostics.json` cases: it
+  builds `expected/` trees and leaves diagnostics cases to the structural check.
+  `crates/packsmith-compiler/tests/conformance_diagnostics.rs` runs them Rust-side for now.
+  The language-agnostic runner should too, which needs a machine-readable diagnostics mode on
+  the `packsmith` CLI (JSON to a file or stdout) so every SDK and host is held to the same
+  assertion.
+- The semantic data-edge checks are deferred until a value block exists to exercise them:
+  the source of an edge must be a value node, the endpoint types must be assignable
+  (`spec/types.md` section 5), a slot-scoped output is invisible from outside its slot
+  (section 2.4), and a port holds a literal or an edge but not both. Codes are reserved in
+  `spec/diagnostics.md`; `packsmith-compiler::validate` checks only edge structure today
+  (unknown node, forward reference, cycle).
 - Generate `test_instance` and `test_environment` assets for a user's own pack, so Packsmith
   can emit tests for the pack it just built. Unscheduled, out of v1 scope. Under ADR-0010 the
   pack model is open: `test_instance` and `test_environment` are registry categories like any

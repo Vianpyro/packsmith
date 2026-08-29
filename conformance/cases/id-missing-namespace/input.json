@@ -1,0 +1,23 @@
+{
+  "version": 0,
+  "project": {
+    "name": "Id Missing Namespace",
+    "namespace": "example"
+  },
+  "root": [
+    {
+      "id": "fn-bare",
+      "block": "packsmith/function@1.0.0",
+      "inputs": { "name": "tick" },
+      "slots": {
+        "body": [
+          {
+            "id": "cmd-say",
+            "block": "packsmith/command@1.0.0",
+            "inputs": { "command": "say hi" }
+          }
+        ]
+      }
+    }
+  ]
+}

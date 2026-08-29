@@ -7,9 +7,14 @@
 //! result is one `data` pack carrying the project description and every resource
 //! the graph produced.
 //!
-//! Lowering emits the diagnostics this path naturally meets -- an unknown block,
-//! a missing required input. A systematic validation pass (types, cross
-//! references, command grammar) is the next task and is not done here.
+//! Before lowering, [`validate`] walks the graph once and collects every
+//! diagnostic its shape can carry -- unknown blocks, missing or ill-typed
+//! inputs, misplaced nodes, broken data edges (`spec/diagnostics.md`). Command
+//! grammar is not checked here: that is the Brigadier stage (ADR-0012), a
+//! separate task. When validation finds an error the graph is not lowered, so a
+//! diagnostic is reported once and from one place.
+
+mod validate;
 
 use serde::Deserialize;
 
@@ -17,6 +22,7 @@ use packsmith_blocks::{Node, lower_root};
 use packsmith_ir::{Ir, Pack, Target, Text};
 
 pub use packsmith_ir::{Diagnostic, Severity, StatementAddress};
+pub use validate::validate;
 
 /// A graph document (`spec/graph.schema.json`). `root` is the top-level ordered
 /// slot; `edges` are captured but not interpreted yet (v1 function bodies are
@@ -41,20 +47,32 @@ pub struct Project {
     pub description: Option<Text>,
 }
 
-/// The outcome of lowering a graph: the IR, plus every diagnostic found. A graph
-/// with mistakes still lowers to a best-effort IR so the editor can show the
-/// whole picture at once; the CLI refuses to emit when any diagnostic is an
-/// error.
+/// The outcome of compiling a graph: the IR, plus every diagnostic found.
+///
+/// A graph that fails validation is not lowered: `ir` then holds the one `data`
+/// pack with its description and no resources, and `diagnostics` holds the
+/// validation errors. A graph that passes is lowered node by node and any
+/// diagnostic met there is collected too. Either way the CLI refuses to emit
+/// when a diagnostic is an error.
 #[derive(Debug, Clone)]
 pub struct Compilation {
     pub ir: Ir,
     pub diagnostics: Vec<Diagnostic>,
 }
 
-/// Lower a graph to IR for `target_id`.
+/// Compile a graph to IR for `target_id`: validate, then lower if it is clean.
 pub fn compile(graph: &Graph, target_id: &str) -> Compilation {
-    let _ = &graph.edges;
-    let lowered = lower_root(&graph.root);
+    let mut diagnostics = validate(graph);
+    let has_error = diagnostics.iter().any(|d| d.severity == Severity::Error);
+
+    let resources = if has_error {
+        Vec::new()
+    } else {
+        let lowered = lower_root(&graph.root);
+        diagnostics.extend(lowered.diagnostics);
+        lowered.resources
+    };
+
     let ir = Ir {
         version: 0,
         target: Target {
@@ -75,13 +93,10 @@ pub fn compile(graph: &Graph, target_id: &str) -> Compilation {
                     .clone()
                     .unwrap_or_else(|| Text::from(graph.project.name.clone())),
             ),
-            resources: lowered.resources,
+            resources,
         }],
     };
-    Compilation {
-        ir,
-        diagnostics: lowered.diagnostics,
-    }
+    Compilation { ir, diagnostics }
 }
 
 #[cfg(test)]

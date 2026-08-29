@@ -1,0 +1,29 @@
+{
+  "version": 0,
+  "project": {
+    "name": "Edge To Missing Node",
+    "namespace": "example"
+  },
+  "root": [
+    {
+      "id": "fn-hello",
+      "block": "packsmith/function@1.0.0",
+      "inputs": { "name": "example:hello" },
+      "slots": {
+        "body": [
+          {
+            "id": "cmd-say",
+            "block": "packsmith/command@1.0.0",
+            "inputs": { "command": "say hi" }
+          }
+        ]
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": { "node": "not-a-real-node", "port": "value" },
+      "to": { "node": "cmd-say", "port": "command" }
+    }
+  ]
+}

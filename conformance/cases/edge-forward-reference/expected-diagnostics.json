@@ -1,0 +1,11 @@
+{
+  "outcome": "compile-failure",
+  "diagnostics": [
+    {
+      "code": "edge-forward-reference",
+      "severity": "error",
+      "address": { "node": null, "slot": "root", "index": 0 },
+      "message": "This connection reads a value from \"fn-late\", but \"fn-late\" comes after the step that uses it. A value has to be produced before it is read."
+    }
+  ]
+}

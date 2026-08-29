@@ -1,0 +1,13 @@
+{
+  "version": 0,
+  "project": {
+    "name": "Unknown Block",
+    "namespace": "example"
+  },
+  "root": [
+    {
+      "id": "mystery",
+      "block": "packsmith/does-not-exist@1.0.0"
+    }
+  ]
+}

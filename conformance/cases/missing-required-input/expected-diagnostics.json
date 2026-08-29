@@ -1,0 +1,11 @@
+{
+  "outcome": "compile-failure",
+  "diagnostics": [
+    {
+      "code": "input-missing",
+      "severity": "error",
+      "address": { "node": null, "slot": "root", "index": 0 },
+      "message": "This step has no result item set, and it needs one."
+    }
+  ]
+}

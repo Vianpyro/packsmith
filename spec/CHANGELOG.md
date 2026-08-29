@@ -30,6 +30,10 @@ The format is loosely [Keep a Changelog]. Dates are the date the change landed.
   `describe()` and a pure `emit()` returning an IR patch or diagnostics. Written now so the IR
   is designed against it; not implemented until Phase 3 (ADR-0005).
 - `types.md` (spec version 0). The port type system and sequencing rules (ADR-0016).
+- `diagnostics.md` (spec version 0). The diagnostic code namespace and the codes the
+  validation pass emits before lowering: `block-`, `input-`, `slot-`, `edge-`. Conformance
+  cases assert `code`, `severity`, and `address`; `message` and `fix` are recorded only. The
+  `command-` codes are reserved for the command-grammar stage (ADR-0012).
 
 ### Notes
 

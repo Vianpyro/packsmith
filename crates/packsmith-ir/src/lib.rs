@@ -8,6 +8,8 @@
 
 use serde::{Deserialize, Serialize};
 
+pub mod codes;
+
 /// A text component: a bare string, an array of components, or an object
 /// carrying one content field. Shape is not checked here (`spec/ir.schema.json`
 /// `$defs/text`); it is carried through to the emitted document as-is.
@@ -112,14 +114,18 @@ pub enum Severity {
 /// every problem at once (`.claude/rules/rust.md`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Diagnostic {
-    /// Stable machine code, e.g. `legacy-execute-syntax`. `None` marks a
-    /// condition the compiler recognises but has not assigned a code to yet;
-    /// the conformance contract reads `null` the same way
-    /// (`.claude/rules/spec.md`).
+    /// Stable machine code, one of [`codes`]. `None` marks a condition the
+    /// compiler recognises but has not assigned a code to yet; the conformance
+    /// contract reads `null` the same way (`.claude/rules/spec.md`).
     pub code: Option<String>,
     pub severity: Severity,
     /// Where in the graph the diagnostic points.
     pub address: StatementAddress,
+    /// What went wrong, phrased in game terms first and file terms second
+    /// (ADR-0009). This is the sentence the two personas read; it is never
+    /// asserted by a conformance case (`.claude/rules/spec.md`).
+    #[serde(default)]
+    pub message: String,
     /// A concrete suggested edit, phrased in game terms first (ADR-0009).
     /// `None` when the compiler has no actionable suggestion.
     #[serde(skip_serializing_if = "Option::is_none", default)]
@@ -166,6 +172,7 @@ mod tests {
                 slot: "root".to_string(),
                 index: 0,
             },
+            message: "the root slot is empty".to_string(),
             fix: None,
         };
         let json = serde_json::to_string(&d).expect("serialises");

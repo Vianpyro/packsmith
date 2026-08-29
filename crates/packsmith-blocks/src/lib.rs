@@ -10,16 +10,18 @@
 //! This crate depends only on `packsmith-ir`; it is a leaf like
 //! `packsmith-mcversion`, and `packsmith-compiler` depends on it.
 //!
-//! No systematic validation happens here. An error this path naturally meets --
-//! an unknown block, a missing required input, a node that cannot appear where
-//! it was placed -- becomes a diagnostic. A full validation pass is a later task.
+//! Systematic validation is `packsmith_compiler::validate`, which runs first and
+//! stops the build before lowering when it finds an error. [`describe`] is this
+//! crate's half of that: the manifest-shaped view of each built-in it checks a
+//! graph against. The diagnostics still emitted here are a backstop for a direct
+//! [`lower_root`] call and carry a message but no code-owned fix.
 
 use std::collections::BTreeMap;
 
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
-use packsmith_ir::{Body, Command, Diagnostic, Resource, Severity, StatementAddress};
+use packsmith_ir::{Body, Command, Diagnostic, Resource, Severity, StatementAddress, codes};
 
 /// Minecraft version facts about the JSON a built-in block emits. These are shapes
 /// written from memory, which `.claude/rules/minecraft.md` forbids; they are named
@@ -43,6 +45,182 @@ pub struct Node {
     pub inputs: Map<String, Value>,
     #[serde(default)]
     pub slots: BTreeMap<String, Vec<Node>>,
+}
+
+/// What a built-in block looks like from the outside: enough of its manifest
+/// (ADR-0004, `spec/block-manifest.schema.json`) for the compiler's validation
+/// pass to check a graph against it before lowering. The built-ins are a fixed
+/// native set, so this is a table, not a parsed manifest; a parsed manifest
+/// replaces it when out-of-tree blocks land (Phase 3+).
+#[derive(Debug, Clone, Copy)]
+pub struct BlockDescriptor {
+    pub node_kind: NodeKind,
+    pub inputs: &'static [PortSpec],
+    pub slots: &'static [SlotSpec],
+    /// When set, the block is only meaningful inside a slot owned by the named
+    /// block; anywhere else is `slot-rejects-block`. A `packsmith/command` needs
+    /// a `packsmith/function` around it.
+    pub requires_parent: Option<&'static str>,
+}
+
+/// Whether instances of a block are statement nodes or value nodes
+/// (`spec/types.md` section 1). A block is exactly one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NodeKind {
+    Statement,
+    Value,
+}
+
+/// One input port of a block.
+#[derive(Debug, Clone, Copy)]
+pub struct PortSpec {
+    pub name: &'static str,
+    /// What the editor calls this port: game words, not the field name
+    /// (ADR-0009). Diagnostics use it.
+    pub label: &'static str,
+    pub ty: PortType,
+    pub required: bool,
+}
+
+/// One slot of a block.
+#[derive(Debug, Clone, Copy)]
+pub struct SlotSpec {
+    pub name: &'static str,
+    pub label: &'static str,
+    /// Block names this slot accepts. Empty means "any statement node": a slot
+    /// cannot restrict by statement taxonomy in general (`spec/types.md` section
+    /// 4.11), but a block may say which children its own slot expects.
+    pub accepts: &'static [&'static str],
+}
+
+/// The port types of `spec/types.md`, flattened to what the built-ins use. List
+/// element types are spelled out rather than nested: v1 needs only `list<id>`
+/// and `list<item_stack>`, and a nested form would buy nothing.
+#[derive(Debug, Clone, Copy)]
+pub enum PortType {
+    Bool,
+    Int {
+        min: Option<i64>,
+        max: Option<i64>,
+    },
+    Float,
+    /// A string. Its `format` is validated by the command-grammar stage
+    /// (ADR-0012), not by the validation pass.
+    Str,
+    Id {
+        allow_tag: bool,
+    },
+    ItemStack,
+    Text,
+    ListOfId {
+        allow_tag: bool,
+    },
+    ListOfItemStack,
+    Enum(&'static [&'static str]),
+}
+
+/// The manifest-shaped view of a built-in block, or `None` when no built-in
+/// answers to `block_ref`. Version is ignored: the built-ins are versioned with
+/// the crate.
+pub fn describe(block_ref: &str) -> Option<BlockDescriptor> {
+    Some(match block_name(block_ref) {
+        "packsmith/function" => BlockDescriptor {
+            node_kind: NodeKind::Statement,
+            inputs: &[PortSpec {
+                name: "name",
+                label: "name",
+                ty: PortType::Id { allow_tag: false },
+                required: true,
+            }],
+            slots: &[SlotSpec {
+                name: "body",
+                label: "steps",
+                accepts: &["packsmith/command"],
+            }],
+            requires_parent: None,
+        },
+        "packsmith/command" => BlockDescriptor {
+            node_kind: NodeKind::Statement,
+            inputs: &[PortSpec {
+                name: "command",
+                label: "command",
+                ty: PortType::Str,
+                required: true,
+            }],
+            slots: &[],
+            requires_parent: Some("packsmith/function"),
+        },
+        "packsmith/function-tag" => BlockDescriptor {
+            node_kind: NodeKind::Statement,
+            inputs: &[
+                PortSpec {
+                    name: "name",
+                    label: "tag name",
+                    ty: PortType::Id { allow_tag: false },
+                    required: true,
+                },
+                PortSpec {
+                    name: "functions",
+                    label: "function list",
+                    ty: PortType::ListOfId { allow_tag: true },
+                    required: true,
+                },
+                PortSpec {
+                    name: "replace",
+                    label: "replace",
+                    ty: PortType::Bool,
+                    required: false,
+                },
+            ],
+            slots: &[],
+            requires_parent: None,
+        },
+        "packsmith/crafting-shapeless" => BlockDescriptor {
+            node_kind: NodeKind::Statement,
+            inputs: &[
+                PortSpec {
+                    name: "name",
+                    label: "recipe id",
+                    ty: PortType::Id { allow_tag: false },
+                    required: true,
+                },
+                PortSpec {
+                    name: "ingredients",
+                    label: "ingredients",
+                    ty: PortType::ListOfId { allow_tag: true },
+                    required: true,
+                },
+                PortSpec {
+                    name: "result",
+                    label: "result item",
+                    ty: PortType::ItemStack,
+                    required: true,
+                },
+            ],
+            slots: &[],
+            requires_parent: None,
+        },
+        "packsmith/loot-table" => BlockDescriptor {
+            node_kind: NodeKind::Statement,
+            inputs: &[
+                PortSpec {
+                    name: "name",
+                    label: "loot table id",
+                    ty: PortType::Id { allow_tag: false },
+                    required: true,
+                },
+                PortSpec {
+                    name: "drops",
+                    label: "drops",
+                    ty: PortType::ListOfItemStack,
+                    required: true,
+                },
+            ],
+            slots: &[],
+            requires_parent: None,
+        },
+        _ => return None,
+    })
 }
 
 /// What lowering a list of statement nodes produced: the resources they emit and
@@ -71,12 +249,12 @@ fn lower_statement(node: &Node, at: StatementAddress, out: &mut Lowered) {
         "packsmith/crafting-shapeless" => lower_crafting_shapeless(node, at, out),
         "packsmith/loot-table" => lower_loot_table(node, at, out),
         "packsmith/command" => out.diagnostics.push(error(
-            "command-outside-body",
+            codes::SLOT_REJECTS_BLOCK,
             at,
             "move this command into a function's body slot",
         )),
         _ => out.diagnostics.push(error(
-            "unknown-block",
+            codes::BLOCK_UNKNOWN,
             at,
             &format!("there is no built-in block '{}'", node.block),
         )),
@@ -117,7 +295,7 @@ fn lower_command_child(
 ) {
     if block_name(&node.block) != "packsmith/command" {
         out.diagnostics.push(error(
-            "unsupported-in-body",
+            codes::SLOT_REJECTS_BLOCK,
             at,
             "a function body holds command blocks",
         ));
@@ -179,7 +357,7 @@ fn lower_crafting_shapeless(node: &Node, at: StatementAddress, out: &mut Lowered
     };
     let Some(result) = node.inputs.get("result").cloned() else {
         out.diagnostics.push(error(
-            "missing-input",
+            codes::INPUT_MISSING,
             at,
             "this recipe needs a 'result' item",
         ));
@@ -259,12 +437,17 @@ fn address(node: Option<&str>, slot: &str, index: usize) -> StatementAddress {
     }
 }
 
-fn error(code: &str, address: StatementAddress, fix: &str) -> Diagnostic {
+/// A lowering-time diagnostic. The systematic pass in `packsmith-compiler` runs
+/// first and owns the code, wording, and fix for every condition reachable here
+/// (`spec/diagnostics.md`); this copy is a backstop for a direct `lower_root`
+/// call, so it carries the message only.
+fn error(code: &str, address: StatementAddress, message: &str) -> Diagnostic {
     Diagnostic {
         code: Some(code.to_string()),
         severity: Severity::Error,
         address,
-        fix: Some(fix.to_string()),
+        message: message.to_string(),
+        fix: None,
     }
 }
 
@@ -278,7 +461,7 @@ fn require_str<'a>(
         Some(s) => Some(s),
         None => {
             out.diagnostics.push(error(
-                "missing-input",
+                codes::INPUT_MISSING,
                 at.clone(),
                 &format!("this block needs a '{port}' value"),
             ));
@@ -297,7 +480,7 @@ fn require_list(
         Some(a) => Some(a.clone()),
         None => {
             out.diagnostics.push(error(
-                "missing-input",
+                codes::INPUT_MISSING,
                 at.clone(),
                 &format!("this block needs a '{port}' list"),
             ));
@@ -342,10 +525,34 @@ mod tests {
     }
 
     #[test]
+    fn describe_covers_the_built_ins_and_only_them() {
+        assert!(describe("packsmith/function@1.0.0").is_some());
+        assert!(describe("packsmith/command@9.9.9").is_some());
+        assert!(describe("packsmith/nope@1.0.0").is_none());
+
+        let function = describe("packsmith/function@1.0.0").expect("built-in");
+        assert_eq!(function.node_kind, NodeKind::Statement);
+        assert_eq!(function.slots.len(), 1);
+        assert_eq!(function.slots[0].name, "body");
+        assert!(
+            function
+                .inputs
+                .iter()
+                .any(|p| p.name == "name" && p.required)
+        );
+
+        let command = describe("packsmith/command@1.0.0").expect("built-in");
+        assert_eq!(command.requires_parent, Some("packsmith/function"));
+    }
+
+    #[test]
     fn an_unknown_block_is_a_diagnostic_at_its_address() {
         let out = lower_root(&[node(r#"{ "id": "x", "block": "packsmith/nope@1.0.0" }"#)]);
         assert!(out.resources.is_empty());
-        assert_eq!(out.diagnostics[0].code.as_deref(), Some("unknown-block"));
+        assert_eq!(
+            out.diagnostics[0].code.as_deref(),
+            Some(codes::BLOCK_UNKNOWN)
+        );
         assert_eq!(out.diagnostics[0].address.index, 0);
     }
 
@@ -355,7 +562,10 @@ mod tests {
             r#"{ "id": "fn", "block": "packsmith/function@1.0.0" }"#,
         )]);
         assert!(out.resources.is_empty());
-        assert_eq!(out.diagnostics[0].code.as_deref(), Some("missing-input"));
+        assert_eq!(
+            out.diagnostics[0].code.as_deref(),
+            Some(codes::INPUT_MISSING)
+        );
     }
 
     #[test]

@@ -9,4 +9,6 @@ Planned contents (Phase 0):
 - `ir.schema.json`
 - `block-manifest.schema.json`
 - `wit/packsmith-block.wit`
+- `types.md`
+- `diagnostics.md`
 - `CHANGELOG.md`

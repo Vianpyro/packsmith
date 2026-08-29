@@ -1,0 +1,14 @@
+{
+  "version": 0,
+  "project": {
+    "name": "Command At Root",
+    "namespace": "example"
+  },
+  "root": [
+    {
+      "id": "loose-command",
+      "block": "packsmith/command@1.0.0",
+      "inputs": { "command": "say hi" }
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "version": 0,
+  "project": {
+    "name": "Missing Required Input",
+    "namespace": "example"
+  },
+  "root": [
+    {
+      "id": "recipe-no-result",
+      "block": "packsmith/crafting-shapeless@1.0.0",
+      "inputs": {
+        "name": "example:mystery",
+        "ingredients": ["minecraft:diamond_block"]
+      }
+    }
+  ]
+}

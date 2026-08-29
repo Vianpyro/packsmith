@@ -1,0 +1,25 @@
+{
+  "version": 0,
+  "project": {
+    "name": "Edge Forward Reference",
+    "namespace": "example"
+  },
+  "root": [
+    {
+      "id": "fn-early",
+      "block": "packsmith/function@1.0.0",
+      "inputs": { "name": "example:early" }
+    },
+    {
+      "id": "fn-late",
+      "block": "packsmith/function@1.0.0",
+      "inputs": { "name": "example:late" }
+    }
+  ],
+  "edges": [
+    {
+      "from": { "node": "fn-late", "port": "value" },
+      "to": { "node": "fn-early", "port": "name" }
+    }
+  ]
+}

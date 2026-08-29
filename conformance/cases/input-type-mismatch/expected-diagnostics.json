@@ -1,0 +1,11 @@
+{
+  "outcome": "compile-failure",
+  "diagnostics": [
+    {
+      "code": "input-type",
+      "severity": "error",
+      "address": { "node": null, "slot": "root", "index": 0 },
+      "message": "Result item is text, but this step needs an item, like minecraft:diamond."
+    }
+  ]
+}

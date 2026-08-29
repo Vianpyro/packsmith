@@ -1,0 +1,18 @@
+{
+  "version": 0,
+  "project": {
+    "name": "Input Type Mismatch",
+    "namespace": "example"
+  },
+  "root": [
+    {
+      "id": "recipe-bad-result",
+      "block": "packsmith/crafting-shapeless@1.0.0",
+      "inputs": {
+        "name": "example:mystery",
+        "ingredients": ["minecraft:diamond_block"],
+        "result": "minecraft:diamond"
+      }
+    }
+  ]
+}
