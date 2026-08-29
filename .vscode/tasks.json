@@ -2,6 +2,37 @@
     "version": "2.0.0",
     "tasks": [
         {
+            "label": "Datapacks: build all conformance cases",
+            "detail": "Compile every conformance/cases/*/input.json to target/datapacks/<case>.zip. Copy those into a world's datapacks/ folder to test in game. Failure cases (no expected/ tree) are expected to error and are skipped.",
+            "type": "shell",
+            "command": "$out = 'target/datapacks'; New-Item -ItemType Directory -Force -Path $out | Out-Null; Get-ChildItem conformance/cases -Directory | ForEach-Object { Write-Host \"--- $($_.Name)\"; cargo run -q -p packsmith-cli -- build \"$($_.FullName)/input.json\" --target 26.2 --output \"$out/$($_.Name).zip\" }",
+            "problemMatcher": "$rustc",
+            "presentation": {
+                "clear": true
+            }
+        },
+        {
+            "label": "Datapacks: build case of open input.json",
+            "detail": "Compile the input.json in the folder of the currently open file to target/datapacks/<case>.zip. Open any conformance case's input.json first.",
+            "type": "shell",
+            "command": "cargo run -q -p packsmith-cli -- build \"${fileDirname}/input.json\" --target 26.2 --output \"target/datapacks/${fileDirnameBasename}.zip\"",
+            "problemMatcher": "$rustc",
+            "presentation": {
+                "clear": true
+            }
+        },
+        {
+            "label": "Conformance: xtask ci",
+            "detail": "fmt check + clippy + tests + conformance suite (structure, build, byte-for-byte reproducibility). Run before calling a change done.",
+            "type": "shell",
+            "command": "cargo run -q -p xtask -- ci",
+            "group": "test",
+            "problemMatcher": "$rustc",
+            "presentation": {
+                "clear": true
+            }
+        },
+        {
             "label": "Delete old Git branches",
             "type": "shell",
             "linux": {
