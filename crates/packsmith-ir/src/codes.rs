@@ -9,8 +9,9 @@
 //!
 //! Codes are lower-case, `-` separated, and grouped by a prefix that names the
 //! part of the graph at fault: `block-`, `input-`, `slot-`, `edge-`. The
-//! `command-` family belongs to the command-grammar stage (ADR-0012) and is
-//! declared in `spec/diagnostics.md`, not here, until that stage lands.
+//! `command-` family is emitted by the command-grammar stage (ADR-0012), which
+//! runs after lowering over the IR command lines rather than in the graph
+//! validation pass.
 
 /// The node names a block that is not installed.
 pub const BLOCK_UNKNOWN: &str = "block-unknown";
@@ -49,3 +50,13 @@ pub const EDGE_FORWARD_REFERENCE: &str = "edge-forward-reference";
 /// The data edges form a cycle: every node in it waits for another
 /// (`spec/types.md` section 2.4).
 pub const EDGE_CYCLE: &str = "edge-cycle";
+
+/// A command line does not parse against the target's Brigadier tree: an unknown
+/// command, a misspelled subcommand, or a line that stops before it is complete
+/// (ADR-0012). Emitted after lowering, over the IR command lines.
+pub const COMMAND_INVALID: &str = "command-invalid";
+
+/// A command line is a recognisable older form the target no longer accepts --
+/// today, `execute` followed straight by a selector or a `~`/`^` position, the
+/// pre-1.13 form. The returning-creator failure mode of ADR-0009.
+pub const COMMAND_LEGACY_SYNTAX: &str = "command-legacy-syntax";

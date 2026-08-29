@@ -43,6 +43,8 @@ pub fn render(diagnostic: &Diagnostic) -> Rendered {
         Some(codes::EDGE_UNKNOWN_NODE) => edge_unknown_node(p),
         Some(codes::EDGE_FORWARD_REFERENCE) => edge_forward_reference(p),
         Some(codes::EDGE_CYCLE) => edge_cycle(p),
+        Some(codes::COMMAND_INVALID) => command_invalid(p),
+        Some(codes::COMMAND_LEGACY_SYNTAX) => command_legacy_syntax(p),
         _ => Rendered {
             message: "Something about this step isn't right.".to_string(),
             fix: None,
@@ -241,6 +243,44 @@ fn edge_cycle(p: &Params) -> Rendered {
     }
 }
 
+fn command_invalid(p: &Params) -> Rendered {
+    let token = text(p, "token");
+    if token.is_empty() {
+        return Rendered {
+            message: "This isn't a command the game knows in this version.".to_string(),
+            fix: Some(
+                "Check the first word against the current commands -- some were renamed or \
+                 removed since older versions."
+                    .to_string(),
+            ),
+        };
+    }
+    Rendered {
+        message: format!("The game doesn't understand \"{token}\" in this command."),
+        fix: Some(format!(
+            "Check the spelling of \"{token}\", or the words around it -- an argument may have \
+             moved or been renamed since older versions."
+        )),
+    }
+}
+
+fn command_legacy_syntax(p: &Params) -> Rendered {
+    let selector = text(p, "selector");
+    let example = if selector.is_empty() {
+        "execute as <who> at @s run <command>".to_string()
+    } else {
+        format!("execute as {selector} at @s run <command>")
+    };
+    Rendered {
+        message: "`execute` no longer takes a target and a position on its own. That was the \
+                  form used years ago; it needs `as`, `at`, or `run` now."
+            .to_string(),
+        fix: Some(format!(
+            "Rewrite it in the modern form, for example `{example}`."
+        )),
+    }
+}
+
 /// The noun phrase for the value a diagnostic points at, from its port `label`
 /// and an optional `scope` that places it inside a collection.
 fn subject(p: &Params) -> String {
@@ -387,6 +427,36 @@ mod tests {
             params! { "cycle" => vec!["a".to_string(), "b".to_string(), "a".to_string()] },
         ));
         assert!(cyc.message.contains("a -> b -> a"));
+    }
+
+    #[test]
+    fn command_invalid_names_the_rejected_token_when_it_has_one() {
+        let r = render(&diag(
+            codes::COMMAND_INVALID,
+            params! { "command" => "sey hi", "token" => "sey" },
+        ));
+        assert!(r.message.contains("\"sey\""));
+        assert!(r.fix.is_some());
+
+        let whole = render(&diag(
+            codes::COMMAND_INVALID,
+            params! { "command" => "nonsense" },
+        ));
+        assert!(whole.message.contains("isn't a command"));
+    }
+
+    #[test]
+    fn command_legacy_syntax_shows_the_modern_shape_with_their_selector() {
+        let r = render(&diag(
+            codes::COMMAND_LEGACY_SYNTAX,
+            params! { "command" => "execute @e[type=zombie] ~ ~ ~ say boo", "selector" => "@e[type=zombie]" },
+        ));
+        assert!(r.message.contains("execute"));
+        assert!(
+            r.fix
+                .unwrap()
+                .contains("execute as @e[type=zombie] at @s run")
+        );
     }
 
     #[test]

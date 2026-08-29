@@ -349,7 +349,7 @@ diagnostic code.
 
 ## 12. Command grammar validation
 
-**Status.** Not started.
+**Status.** In progress.
 
 **Goal.** Validate every command string against the target's extracted Brigadier tree, as a
 compiler stage with real diagnostics — the last Phase 1 code work.

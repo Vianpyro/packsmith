@@ -11,21 +11,23 @@ use std::process::Command;
 
 use serde::Deserialize;
 
-/// How a conformance run went: how many verified cases were built and how many
-/// were skipped because their `expected/` still holds a `PLACEHOLDER.md`.
+/// How a conformance run went: how many verified cases were built and diffed
+/// against their tree, and how many still-unverified cases (`expected/` holds a
+/// `PLACEHOLDER.md`) were built to confirm they at least compile.
 pub(crate) struct Outcome {
     pub ran: usize,
-    pub skipped: usize,
+    pub built_unchecked: usize,
 }
 
 /// Build and verify every case whose `expected/` tree has been hand-checked
-/// against a real game instance.
+/// against a real game instance, and build (without diffing) every case whose
+/// tree is still a `PLACEHOLDER.md`.
 ///
-/// A case is skipped while its `expected/` still holds a `PLACEHOLDER.md`: that
-/// marker means the tree has not been verified in game yet, so there is nothing
-/// trustworthy to compare against. A run where *every* buildable case is a
-/// placeholder is a failure, not a pass: CI would otherwise go green having
-/// checked nothing.
+/// A placeholder tree has not been verified in game yet (ADR-0017), so there is
+/// nothing trustworthy to compare against -- but the case must still compile and
+/// emit, so a regression there is caught before the in-game pass. A run where
+/// *every* buildable case is a placeholder is a failure, not a pass: CI would
+/// otherwise go green having verified nothing.
 pub(crate) fn run_verified_cases(cases_dir: &Path) -> Result<Outcome, Vec<String>> {
     if !crate::run_cargo(&["build", "-p", "packsmith-cli", "--locked"]) {
         return Err(vec!["cargo build -p packsmith-cli failed".to_string()]);
@@ -45,7 +47,7 @@ pub(crate) fn run_verified_cases(cases_dir: &Path) -> Result<Outcome, Vec<String
     };
     names.sort();
 
-    let (verifiable, skipped) = partition_cases(&names, cases_dir);
+    let (verifiable, placeholders) = partition_cases(&names, cases_dir);
 
     let mut problems = Vec::new();
     for (name, case) in &verifiable {
@@ -53,31 +55,56 @@ pub(crate) fn run_verified_cases(cases_dir: &Path) -> Result<Outcome, Vec<String
             problems.push(format!("{name}: {e}"));
         }
     }
-    if verifiable.is_empty() && skipped > 0 {
+    for (name, case) in &placeholders {
+        if let Err(e) = build_case(&bin, case, name) {
+            problems.push(format!("{name}: {e}"));
+        }
+    }
+    if verifiable.is_empty() && !placeholders.is_empty() {
         problems.push(format!(
-            "all {skipped} buildable conformance cases still carry expected/PLACEHOLDER.md; \
-             none has been verified in game"
+            "all {} buildable conformance cases still carry expected/PLACEHOLDER.md; \
+             none has been verified in game",
+            placeholders.len()
         ));
     }
 
     if problems.is_empty() {
         Ok(Outcome {
             ran: verifiable.len(),
-            skipped,
+            built_unchecked: placeholders.len(),
         })
     } else {
         Err(problems)
     }
 }
 
+/// Build a case once and confirm it produced a non-empty zip. No tree to diff
+/// yet (the `expected/` is a placeholder), so this only proves it compiles and
+/// emits.
+fn build_case(bin: &Path, case: &Path, name: &str) -> Result<(), String> {
+    let target = read_target_id(&case.join("target.json"))?;
+    let work = std::env::temp_dir().join(format!("packsmith-conformance-{name}"));
+    let _ = std::fs::remove_dir_all(&work);
+    std::fs::create_dir_all(&work).map_err(|e| format!("creating {}: {e}", work.display()))?;
+    let zip = work.join("build.zip");
+    run_build(bin, &case.join("input.json"), &target, &zip)?;
+    let bytes = std::fs::read(&zip).map_err(|e| format!("reading {}: {e}", zip.display()))?;
+    if bytes.is_empty() {
+        return Err("build produced an empty zip".to_string());
+    }
+    let _ = std::fs::remove_dir_all(&work);
+    Ok(())
+}
+
 /// Split case names into the ones with a real `expected/` tree to build against
-/// and a count of the ones still stubbed with `PLACEHOLDER.md`. A case with no
-/// `expected/` at all is a diagnostics-only case (it carries
-/// `expected-diagnostics.json`) and is the structural check's business, not
-/// this runner's.
-fn partition_cases(names: &[String], cases_dir: &Path) -> (Vec<(String, PathBuf)>, usize) {
+/// and the ones still stubbed with `PLACEHOLDER.md`. A case with no `expected/`
+/// at all is a diagnostics-only case (it carries `expected-diagnostics.json`)
+/// and is the structural check's business, not this runner's.
+type Cases = Vec<(String, PathBuf)>;
+
+fn partition_cases(names: &[String], cases_dir: &Path) -> (Cases, Cases) {
     let mut verifiable = Vec::new();
-    let mut skipped = 0;
+    let mut placeholders = Vec::new();
     for name in names {
         let case = cases_dir.join(name);
         let expected = case.join("expected");
@@ -85,12 +112,12 @@ fn partition_cases(names: &[String], cases_dir: &Path) -> (Vec<(String, PathBuf)
             continue;
         }
         if expected.join("PLACEHOLDER.md").is_file() {
-            skipped += 1;
+            placeholders.push((name.clone(), case));
         } else {
             verifiable.push((name.clone(), case));
         }
     }
-    (verifiable, skipped)
+    (verifiable, placeholders)
 }
 
 fn verify_case(bin: &Path, case: &Path, name: &str) -> Result<(), String> {
@@ -315,8 +342,8 @@ mod tests {
         std::fs::create_dir_all(tmp.join("d")).unwrap(); // diagnostics-only: no expected/
 
         let names = ["a", "b", "c", "d"].map(str::to_string).to_vec();
-        let (verifiable, skipped) = partition_cases(&names, &tmp);
-        assert_eq!(skipped, 2);
+        let (verifiable, placeholders) = partition_cases(&names, &tmp);
+        assert_eq!(placeholders.len(), 2);
         assert_eq!(verifiable.len(), 1);
         assert_eq!(verifiable[0].0, "c");
 
@@ -336,7 +363,7 @@ mod tests {
             .filter(|e| e.path().is_dir())
             .map(|e| e.file_name().to_string_lossy().into_owned())
             .collect();
-        let (verifiable, _skipped) = partition_cases(&names, &cases);
+        let (verifiable, _placeholders) = partition_cases(&names, &cases);
         assert!(
             !verifiable.is_empty(),
             "no conformance case has a verified expected/ tree"

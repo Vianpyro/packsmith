@@ -290,6 +290,30 @@ pub fn describe(block_ref: &str) -> Option<BlockDescriptor> {
             slots: &[],
             requires_parent: Some("packsmith/function"),
         },
+        "packsmith/mcfunction" => BlockDescriptor {
+            id: "packsmith/mcfunction",
+            title: "raw function file",
+            node_kind: NodeKind::Statement,
+            inputs: &[
+                PortSpec {
+                    name: "name",
+                    label: "function id",
+                    ty: PortType::Id {
+                        registry: "minecraft:function",
+                        allow_tag: false,
+                    },
+                    required: true,
+                },
+                PortSpec {
+                    name: "source",
+                    label: "function file",
+                    ty: PortType::Str,
+                    required: true,
+                },
+            ],
+            slots: &[],
+            requires_parent: None,
+        },
         "packsmith/function-tag" => BlockDescriptor {
             id: "packsmith/function-tag",
             title: "function tag",
@@ -389,6 +413,7 @@ pub fn describe(block_ref: &str) -> Option<BlockDescriptor> {
 pub const BUILTIN_IDS: &[&str] = &[
     "packsmith/function",
     "packsmith/command",
+    "packsmith/mcfunction",
     "packsmith/function-tag",
     "packsmith/crafting-shapeless",
     "packsmith/loot-table",
@@ -424,6 +449,7 @@ pub fn lower_root(nodes: &[Node]) -> Lowered {
 fn lower_statement(node: &Node, at: StatementAddress, out: &mut Lowered) {
     match block_name(&node.block) {
         "packsmith/function" => lower_function(node, at, out),
+        "packsmith/mcfunction" => lower_mcfunction(node, at, out),
         "packsmith/function-tag" => lower_function_tag(node, at, out),
         "packsmith/crafting-shapeless" => lower_crafting_shapeless(node, at, out),
         "packsmith/loot-table" => lower_loot_table(node, at, out),
@@ -461,6 +487,37 @@ fn lower_function(node: &Node, at: StatementAddress, out: &mut Lowered) {
             out,
         );
     }
+
+    out.resources.push(Resource {
+        category: "function".to_string(),
+        id: name,
+        origin: at,
+        body: Body::Commands { statements },
+    });
+}
+
+/// `packsmith/mcfunction`: the escape hatch (`spec/types.md` section 4.4). Its
+/// `source` is a whole function file; it lowers to one `function` resource whose
+/// body is that file split on lines, each line -- command, `#`-comment, or blank
+/// -- carried through verbatim so the emitted file is byte-exact (ADR-0007). The
+/// command-grammar stage validates the non-comment, non-blank lines (ADR-0012).
+/// A line at index `j` gets the address `(<this node>, "source", j)`.
+fn lower_mcfunction(node: &Node, at: StatementAddress, out: &mut Lowered) {
+    let Some(name) = require_str(node, "name", &at, out).map(str::to_string) else {
+        return;
+    };
+    let Some(source) = require_str(node, "source", &at, out).map(str::to_string) else {
+        return;
+    };
+
+    let statements = source
+        .lines()
+        .enumerate()
+        .map(|(j, line)| Command::Text {
+            command: line.to_string(),
+            origin: address(Some(&node.id), "source", j),
+        })
+        .collect();
 
     out.resources.push(Resource {
         category: "function".to_string(),
@@ -727,6 +784,26 @@ mod tests {
             }
             Body::Json { .. } => panic!("a function is a commands body"),
         }
+    }
+
+    #[test]
+    fn a_raw_mcfunction_keeps_every_line_including_comments_and_blanks() {
+        let out = lower_root(&[node(
+            r##"{ "id": "fn-raw", "block": "packsmith/mcfunction@1.0.0",
+                 "inputs": { "name": "example:raw",
+                             "source": "# note\nsay a\n\nsay b\n" } }"##,
+        )]);
+        assert!(out.diagnostics.is_empty());
+        let Body::Commands { statements } = &out.resources[0].body else {
+            panic!("a function is a commands body");
+        };
+        let lines: Vec<&str> = statements
+            .iter()
+            .map(|Command::Text { command, .. }| command.as_str())
+            .collect();
+        assert_eq!(lines, ["# note", "say a", "", "say b"]);
+        let Command::Text { origin, .. } = &statements[1];
+        assert_eq!((origin.slot.as_str(), origin.index), ("source", 1));
     }
 
     #[test]

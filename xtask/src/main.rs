@@ -95,8 +95,8 @@ fn ci() -> ExitCode {
     eprintln!("xtask ci: conformance (build + reproducibility)");
     match conformance::run_verified_cases(&cases_dir) {
         Ok(o) => eprintln!(
-            "xtask ci: conformance builds OK ({} verified, hashes match; {} skipped, awaiting in-game verification)",
-            o.ran, o.skipped
+            "xtask ci: conformance builds OK ({} verified, hashes match; {} built but tree still awaiting in-game verification)",
+            o.ran, o.built_unchecked
         ),
         Err(problems) => {
             eprintln!("xtask ci: conformance builds failed");

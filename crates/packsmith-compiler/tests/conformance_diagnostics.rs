@@ -12,6 +12,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use packsmith_compiler::{Graph, Severity, compile};
+use packsmith_mcversion::TargetData;
 
 fn cases_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../conformance/cases")
@@ -70,8 +71,10 @@ fn every_failure_case_produces_its_expected_diagnostics() {
         let target: serde_json::Value =
             serde_json::from_str(&fs::read_to_string(dir.join("target.json")).unwrap()).unwrap();
         let target_id = target["id"].as_str().expect("target id");
+        let target_data = TargetData::load(&packsmith_mcversion::bundled_data_dir(), target_id)
+            .unwrap_or_else(|e| panic!("{name}: no target data for {target_id}: {e}"));
 
-        let out = compile(&graph, target_id);
+        let out = compile(&graph, &target_data);
 
         assert!(
             out.diagnostics

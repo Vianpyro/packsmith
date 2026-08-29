@@ -98,7 +98,7 @@ fn build(args: &[String]) -> Result<(), String> {
     let target_data = TargetData::load(&packsmith_mcversion::bundled_data_dir(), &target)
         .map_err(|e| format!("packsmith build: {e}"))?;
 
-    let Compilation { ir, diagnostics } = packsmith_compiler::compile(&graph, &target);
+    let Compilation { ir, diagnostics } = packsmith_compiler::compile(&graph, &target_data);
     report_diagnostics(&diagnostics);
     let errors = diagnostics
         .iter()

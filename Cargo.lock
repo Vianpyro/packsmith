@@ -276,6 +276,7 @@ version = "0.1.0"
 dependencies = [
  "packsmith-blocks",
  "packsmith-ir",
+ "packsmith-mcversion",
  "serde",
  "serde_json",
 ]
