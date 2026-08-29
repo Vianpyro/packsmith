@@ -10,5 +10,6 @@ repository.workspace = true
 
 [dependencies]
 packsmith-ir = { path = "../packsmith-ir" }
+packsmith-blocks = { path = "../packsmith-blocks" }
 serde = { workspace = true }
 serde_json = { workspace = true }

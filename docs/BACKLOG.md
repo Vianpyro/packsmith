@@ -26,6 +26,18 @@ widening the scope of the task in front of you. Nothing here is committed to.
 - `conformance/` has no schema for `expected-diagnostics.json` (the compile-failure result
   format defined in `conformance/README.md`). A one-object schema would let the runner reject
   a malformed expectation instead of misreading it.
+- The recipe/loot-table body shapes emitted by `packsmith-blocks` are hand-written best
+  guesses (`minecraft:crafting_shapeless` type string, bare-string ingredients, `{id,count}`
+  result, `{type,name}` loot entry). The `recipe` case README wants the recipe type
+  discriminator to come from target data, not a literal. Neither the recipe type table nor a
+  per-category body schema is extracted yet; add it to `xtask sync-target` when the schema
+  validator lands and move the literal out of the block.
+- `packsmith/loot-table` drops the `count` on an `item_stack` drop entirely (the one case has
+  no count). Carry it through — as `minecraft:set_count` or the entry's own field, whichever
+  the target schema wants — once that schema is available.
+- `packsmith/function-tag`, `crafting-shapeless`, `loot-table` are top-level statement nodes
+  but nothing checks a `command` block is not placed at root, or that a `function` `body`
+  child is a statement not a value node. That is the systematic validation pass.
 - Generate `test_instance` and `test_environment` assets for a user's own pack, so Packsmith
   can emit tests for the pack it just built. Unscheduled, out of v1 scope. Under ADR-0010 the
   pack model is open: `test_instance` and `test_environment` are registry categories like any

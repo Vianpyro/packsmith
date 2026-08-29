@@ -46,11 +46,46 @@ pub struct Pack {
 
 /// One thing a pack contains: a function, a tag, a recipe.
 ///
-/// Empty until the one-function conformance case forces the fields
-/// (`category`, `id`, `origin`, `body`) to be modelled against a real
-/// consumer (ROADMAP Phase 1).
+/// `category` is a free-form slash-separated string resolved through the target
+/// data table, never an enum (ADR-0010). `origin` is the statement address the
+/// resource was lowered from, so a diagnostic about it can name the block the
+/// user placed (ADR-0009).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Resource {}
+pub struct Resource {
+    pub category: String,
+    pub id: String,
+    pub origin: StatementAddress,
+    pub body: Body,
+}
+
+/// The content of a resource, as a tagged form (`spec/ir.schema.json`
+/// `$defs/body`). `commands` carries an ordered statement list; `json` carries a
+/// document the game reads as JSON. New forms are added as further variants
+/// without a breaking change.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "form", rename_all = "lowercase")]
+pub enum Body {
+    /// An ordered list of command lines. Order is significant and is exactly the
+    /// order of the slot it was lowered from.
+    Commands { statements: Vec<Command> },
+    /// A JSON document. Object key order is not significant; the emitter writes
+    /// keys sorted (`packsmith-emit`).
+    Json { value: serde_json::Value },
+}
+
+/// One command line, as a tagged form (`spec/ir.schema.json` `$defs/command`).
+/// `text` is the only form in v1: the command is text, carried through verbatim
+/// (ADR-0012). Command grammar validation is a later task.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "form", rename_all = "lowercase")]
+pub enum Command {
+    Text {
+        /// One command line, no leading slash, no newline.
+        command: String,
+        /// The statement this line came from. Several lines may share one origin.
+        origin: StatementAddress,
+    },
+}
 
 /// The stable address of a statement: the node owning the slot, the slot name,
 /// and the zero-based index within it (`spec/ir.schema.json`
@@ -94,6 +129,32 @@ pub struct Diagnostic {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_commands_body_and_a_json_body_carry_their_form_tag() {
+        let addr = StatementAddress {
+            node: Some("fn-hello".to_string()),
+            slot: "body".to_string(),
+            index: 0,
+        };
+        let commands = Body::Commands {
+            statements: vec![Command::Text {
+                command: "say hi".to_string(),
+                origin: addr.clone(),
+            }],
+        };
+        let json = serde_json::to_string(&commands).expect("serialises");
+        assert!(json.contains(r#""form":"commands""#));
+        assert!(json.contains(r#""form":"text""#));
+
+        let doc = Body::Json {
+            value: serde_json::json!({ "values": ["example:hello"] }),
+        };
+        assert_eq!(
+            serde_json::to_string(&doc).expect("serialises"),
+            r#"{"form":"json","value":{"values":["example:hello"]}}"#
+        );
+    }
 
     #[test]
     fn a_diagnostic_serialises_with_a_lowercase_severity_and_omits_an_absent_fix() {

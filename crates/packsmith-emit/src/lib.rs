@@ -11,7 +11,7 @@ use std::collections::BTreeMap;
 
 use serde::Serialize;
 
-use packsmith_ir::{Ir, Text};
+use packsmith_ir::{Body, Command, Ir, Resource, Text};
 use packsmith_mcversion::TargetData;
 
 /// Why an IR document could not be emitted for a target.
@@ -19,6 +19,10 @@ use packsmith_mcversion::TargetData;
 pub enum EmitError {
     #[error("target {target} does not support pack kind '{kind}'")]
     UnsupportedPackKind { target: String, kind: String },
+    #[error("target {target} does not define resource category '{category}'")]
+    UnsupportedCategory { target: String, category: String },
+    #[error("resource id '{id}' has no namespace")]
+    UnnamespacedId { id: String },
 }
 
 /// The pack contents, path to bytes, exactly as they appear inside the built
@@ -26,9 +30,24 @@ pub enum EmitError {
 pub type FileTree = BTreeMap<String, Vec<u8>>;
 
 /// Lower an IR document to its file tree.
+///
+/// Every path comes from target data: the pack root from the pack kind, the
+/// directory and extension from the resource category (ADR-0006, ADR-0010).
+/// Nothing here is a hardcoded directory name or extension.
+///
+/// Determinism (ADR-0007): the `FileTree` is a `BTreeMap`, so entries stay
+/// sorted; JSON bodies are written with object keys sorted and array order kept;
+/// function bodies use LF on every host OS with a trailing newline.
 pub fn file_tree(ir: &Ir, target: &TargetData) -> Result<FileTree, EmitError> {
     let mut tree = FileTree::new();
     for pack in &ir.packs {
+        let root = &target
+            .pack_kind(&pack.kind)
+            .ok_or_else(|| EmitError::UnsupportedPackKind {
+                target: target.target().to_string(),
+                kind: pack.kind.clone(),
+            })?
+            .root;
         let format =
             target
                 .pack_format(&pack.kind)
@@ -36,13 +55,73 @@ pub fn file_tree(ir: &Ir, target: &TargetData) -> Result<FileTree, EmitError> {
                     target: target.target().to_string(),
                     kind: pack.kind.clone(),
                 })?;
+
         let meta = PackMcmeta::new(pack.description.clone(), format);
         tree.insert("pack.mcmeta".to_string(), meta.to_bytes());
-        // Resources are not modelled yet (packsmith-ir). When they are, each
-        // lands at `<root>/<namespace>/<category dir>/<path>.<ext>` from target
-        // data, and the tree stays sorted for free (ROADMAP Phase 1).
+
+        for resource in &pack.resources {
+            let (path, bytes) = emit_resource(root, resource, target)?;
+            tree.insert(path, bytes);
+        }
     }
     Ok(tree)
+}
+
+/// One resource to its `(path, bytes)`. The path is
+/// `<root>/<namespace>/<category directory>/<id path>.<category extension>`.
+fn emit_resource(
+    root: &str,
+    resource: &Resource,
+    target: &TargetData,
+) -> Result<(String, Vec<u8>), EmitError> {
+    let category =
+        target
+            .category(&resource.category)
+            .ok_or_else(|| EmitError::UnsupportedCategory {
+                target: target.target().to_string(),
+                category: resource.category.clone(),
+            })?;
+    let (namespace, id_path) =
+        resource
+            .id
+            .split_once(':')
+            .ok_or_else(|| EmitError::UnnamespacedId {
+                id: resource.id.clone(),
+            })?;
+
+    let path = format!(
+        "{root}/{namespace}/{}/{id_path}.{}",
+        category.directory, category.extension
+    );
+    let bytes = match &resource.body {
+        Body::Commands { statements } => function_bytes(statements),
+        Body::Json { value } => json_bytes(value),
+    };
+    Ok((path, bytes))
+}
+
+/// A function body: one command line per statement, joined with LF and ending in
+/// LF, on every host OS including Windows. A CRLF leaking in from the host would
+/// make the build non-reproducible across machines (ADR-0007).
+fn function_bytes(statements: &[Command]) -> Vec<u8> {
+    let mut out = String::new();
+    for statement in statements {
+        let Command::Text { command, .. } = statement;
+        out.push_str(command);
+        out.push('\n');
+    }
+    out.into_bytes()
+}
+
+/// A JSON body: object keys sorted, array order kept, no insignificant
+/// whitespace, one trailing newline. serde_json serialises a `Map` in key order
+/// unless the `preserve_order` feature is on, which this workspace does not
+/// enable, so sorting needs no dependency. Minecraft does not care about key
+/// order.
+fn json_bytes(value: &serde_json::Value) -> Vec<u8> {
+    let mut bytes = serde_json::to_vec(value).unwrap_or_default();
+    bytes.push(b'\n');
+    bytes
 }
 
 /// Pack the file tree into a zip, deterministically: STORE (no compression, so
@@ -130,8 +209,10 @@ struct PackMcmeta {
 
 #[derive(Serialize)]
 struct PackSection {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    description: Option<Text>,
+    /// Always written, even as `""`: the game silently rejects a data pack whose
+    /// `pack.mcmeta` has no `pack.description`. The compiler supplies a default
+    /// (the project name); this is the last-resort fallback.
+    description: Text,
     min_format: [u32; 2],
     max_format: u32,
 }
@@ -140,7 +221,7 @@ impl PackMcmeta {
     fn new(description: Option<Text>, format: packsmith_mcversion::PackFormat) -> Self {
         Self {
             pack: PackSection {
-                description,
+                description: description.unwrap_or_else(|| Text::from("")),
                 min_format: [format.major, format.minor],
                 max_format: format.major,
             },
@@ -219,6 +300,78 @@ mod tests {
         assert!(matches!(
             file_tree(&ir, &target()),
             Err(EmitError::UnsupportedPackKind { .. })
+        ));
+    }
+
+    fn addr() -> packsmith_ir::StatementAddress {
+        packsmith_ir::StatementAddress {
+            node: None,
+            slot: "root".to_string(),
+            index: 0,
+        }
+    }
+
+    fn resource(category: &str, id: &str, body: Body) -> Resource {
+        Resource {
+            category: category.to_string(),
+            id: id.to_string(),
+            origin: addr(),
+            body,
+        }
+    }
+
+    #[test]
+    fn a_function_resource_lands_where_target_data_says_with_lf_and_a_trailing_newline() {
+        let mut ir = empty_pack_ir();
+        ir.packs[0].description = None;
+        ir.packs[0].resources = vec![resource(
+            "function",
+            "example:hello",
+            Body::Commands {
+                statements: vec![Command::Text {
+                    command: "say Hello, world!".to_string(),
+                    origin: addr(),
+                }],
+            },
+        )];
+        let tree = file_tree(&ir, &target()).expect("emits");
+        assert_eq!(
+            String::from_utf8(tree["data/example/function/hello.mcfunction"].clone()).unwrap(),
+            "say Hello, world!\n"
+        );
+    }
+
+    #[test]
+    fn a_json_resource_is_written_with_sorted_keys_and_a_trailing_newline() {
+        let mut ir = empty_pack_ir();
+        ir.packs[0].description = None;
+        ir.packs[0].resources = vec![resource(
+            "tags/function",
+            "minecraft:load",
+            Body::Json {
+                value: serde_json::json!({ "values": ["example:hello"] }),
+            },
+        )];
+        let tree = file_tree(&ir, &target()).expect("emits");
+        assert_eq!(
+            String::from_utf8(tree["data/minecraft/tags/function/load.json"].clone()).unwrap(),
+            "{\"values\":[\"example:hello\"]}\n"
+        );
+    }
+
+    #[test]
+    fn an_unknown_category_is_a_diagnostic_not_a_panic() {
+        let mut ir = empty_pack_ir();
+        ir.packs[0].resources = vec![resource(
+            "worldgen/biome",
+            "example:x",
+            Body::Json {
+                value: serde_json::json!({}),
+            },
+        )];
+        assert!(matches!(
+            file_tree(&ir, &target()),
+            Err(EmitError::UnsupportedCategory { .. })
         ));
     }
 
