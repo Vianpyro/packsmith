@@ -10,17 +10,21 @@
 //! behind extracted data that may not exist for a given registry.
 //!
 //! Every diagnostic carries a code from [`packsmith_ir::codes`], a severity, the
-//! statement address it points at, and a suggested fix where one is knowable.
-//! Codes are stable: `spec/diagnostics.md` is the normative list and conformance
-//! cases assert on them.
+//! statement address it points at, and typed `params` -- the facts of this
+//! occurrence. No sentence is built here: `packsmith_ir::message::render` turns
+//! code plus params into the wording and the fix, in one place (ADR-0009). Codes
+//! are stable: `spec/diagnostics.md` is the normative list and conformance cases
+//! assert on them.
 
 use std::collections::{BTreeMap, HashSet};
 
 use serde::Deserialize;
 use serde_json::Value;
 
-use packsmith_blocks::{Node, NodeKind, PortSpec, PortType, describe};
-use packsmith_ir::{Diagnostic, Severity, StatementAddress, codes};
+use packsmith_blocks::{
+    BlockDescriptor, Node, NodeKind, PortSpec, PortType, describe, display_name,
+};
+use packsmith_ir::{Diagnostic, Param, Severity, StatementAddress, codes, params};
 
 use crate::Graph;
 
@@ -92,10 +96,7 @@ impl Walk<'_> {
                 self.push(
                     codes::BLOCK_UNKNOWN,
                     at,
-                    format!("Nothing here knows a block called \"{}\".", node.block),
-                    Some(
-                        "Check the name for a typo, or pick a block from the palette.".to_string(),
-                    ),
+                    params! { "block" => node.block.clone() },
                 );
                 continue;
             };
@@ -122,7 +123,7 @@ impl Walk<'_> {
 
     fn check_placement(
         &mut self,
-        desc: &packsmith_blocks::BlockDescriptor,
+        desc: &BlockDescriptor,
         block_ref: &str,
         parent_block: Option<&str>,
         accepts: &[&str],
@@ -134,30 +135,21 @@ impl Walk<'_> {
             self.push(
                 codes::SLOT_EXPECTS_STATEMENT,
                 at.clone(),
-                format!(
-                    "\"{name}\" produces a value, so it can't be a step here. Steps happen in \
-                     order; a value is wired into an input instead."
-                ),
-                Some(
-                    "Connect this block into an input rather than placing it as a step."
-                        .to_string(),
-                ),
+                params! { "block" => desc.title },
             );
             return;
         }
 
         if !accepts.is_empty() && !accepts.contains(&name) {
+            let allowed: Vec<String> = accepts.iter().map(|n| display_name(n)).collect();
             self.push(
                 codes::SLOT_REJECTS_BLOCK,
                 at.clone(),
-                format!(
-                    "A \"{name}\" step can't go here; this slot only takes {}.",
-                    join_or(accepts)
-                ),
-                Some(format!(
-                    "Move the \"{name}\" step out, or replace it with {}.",
-                    join_or(accepts)
-                )),
+                params! {
+                    "reason" => "not_accepted",
+                    "block" => desc.title,
+                    "accepts" => allowed,
+                },
             );
             return;
         }
@@ -168,22 +160,16 @@ impl Walk<'_> {
             self.push(
                 codes::SLOT_REJECTS_BLOCK,
                 at.clone(),
-                "A command can't sit on its own at the top level -- it has to be inside a function."
-                    .to_string(),
-                Some(
-                    "Put this command inside a function's steps, or wrap it in a function."
-                        .to_string(),
-                ),
+                params! {
+                    "reason" => "needs_parent",
+                    "block" => desc.title,
+                    "parent" => display_name(required_parent),
+                },
             );
         }
     }
 
-    fn check_inputs(
-        &mut self,
-        desc: &packsmith_blocks::BlockDescriptor,
-        node: &Node,
-        at: &StatementAddress,
-    ) {
+    fn check_inputs(&mut self, desc: &BlockDescriptor, node: &Node, at: &StatementAddress) {
         for port in desc.inputs {
             let literal = node.inputs.get(port.name);
             let fed = self.fed.contains(&(node.id.clone(), port.name.to_string()));
@@ -191,16 +177,15 @@ impl Walk<'_> {
             match literal {
                 Some(value) => {
                     if let Some(finding) = check_literal(port, value) {
-                        self.push(finding.code, at.clone(), finding.message, finding.fix);
+                        self.push(finding.code, at.clone(), finding.params);
                     }
                 }
                 None if port.required && !fed => {
-                    self.push(
-                        codes::INPUT_MISSING,
-                        at.clone(),
-                        format!("This step has no {} set, and it needs one.", port.label),
-                        Some(missing_fix(port)),
-                    );
+                    let mut p = params! { "block" => desc.title, "label" => port.label };
+                    if matches!(port.ty, PortType::Id { .. } | PortType::ListOfId { .. }) {
+                        p.insert("example".to_string(), Param::from("example:tick"));
+                    }
+                    self.push(codes::INPUT_MISSING, at.clone(), p);
                 }
                 None => {}
             }
@@ -220,41 +205,19 @@ impl Walk<'_> {
                 (None, _) => self.push(
                     codes::EDGE_UNKNOWN_NODE,
                     anchor,
-                    format!(
-                        "A connection reads from a step called \"{}\" that isn't in this project.",
-                        edge.from.node
-                    ),
-                    Some(
-                        "Delete the dangling connection, or restore the missing step.".to_string(),
-                    ),
+                    params! { "node" => edge.from.node.clone(), "role" => "source" },
                 ),
                 (Some(_), None) => self.push(
                     codes::EDGE_UNKNOWN_NODE,
                     anchor,
-                    format!(
-                        "A connection feeds a step called \"{}\" that isn't in this project.",
-                        edge.to.node
-                    ),
-                    Some(
-                        "Delete the dangling connection, or restore the missing step.".to_string(),
-                    ),
+                    params! { "node" => edge.to.node.clone(), "role" => "target" },
                 ),
                 (Some(source), Some(target)) => {
                     if source.position > target.position {
                         self.push(
                             codes::EDGE_FORWARD_REFERENCE,
                             target.address.clone(),
-                            format!(
-                                "This connection reads a value from \"{0}\", but \"{0}\" comes \
-                                 after the step that uses it. A value has to be produced before \
-                                 it is read.",
-                                edge.from.node
-                            ),
-                            Some(format!(
-                                "Move \"{}\" earlier, or read a value that already exists at this \
-                                 point.",
-                                edge.from.node
-                            )),
+                            params! { "from" => edge.from.node.clone() },
                         );
                     }
                 }
@@ -299,21 +262,17 @@ impl Walk<'_> {
             match state.get(next).copied().unwrap_or(Mark::Unseen) {
                 Mark::InProgress => {
                     let start = path.iter().position(|n| *n == next).unwrap_or(0);
-                    let cycle = path[start..].join(" -> ");
+                    let cycle: Vec<String> = path[start..]
+                        .iter()
+                        .map(|n| n.to_string())
+                        .chain(std::iter::once(next.to_string()))
+                        .collect();
                     let anchor = self
                         .nodes
                         .get(next)
                         .map(|info| info.address.clone())
                         .unwrap_or_else(root_address);
-                    self.push(
-                        codes::EDGE_CYCLE,
-                        anchor,
-                        format!(
-                            "These steps feed each other in a loop: {cycle} -> {next}. None of \
-                             them can be worked out first."
-                        ),
-                        Some("Break the loop by removing one of the connections.".to_string()),
-                    );
+                    self.push(codes::EDGE_CYCLE, anchor, params! { "cycle" => cycle });
                     path.pop();
                     return true;
                 }
@@ -332,19 +291,12 @@ impl Walk<'_> {
         false
     }
 
-    fn push(
-        &mut self,
-        code: &str,
-        address: StatementAddress,
-        message: String,
-        fix: Option<String>,
-    ) {
+    fn push(&mut self, code: &str, address: StatementAddress, params: BTreeMap<String, Param>) {
         self.diagnostics.push(Diagnostic {
             code: Some(code.to_string()),
             severity: Severity::Error,
             address,
-            message,
-            fix,
+            params,
         });
     }
 }
@@ -356,194 +308,165 @@ enum Mark {
     Done,
 }
 
+/// A validation finding: the stable code and the facts its message template
+/// reads (`packsmith_ir::message`). No rendered sentence is built here -- the
+/// wording is `render`'s, so it can be reworded or translated in one place
+/// (ADR-0009).
 struct Finding {
     code: &'static str,
-    message: String,
-    fix: Option<String>,
+    params: BTreeMap<String, Param>,
+}
+
+fn finding(code: &'static str, params: BTreeMap<String, Param>) -> Option<Finding> {
+    Some(Finding { code, params })
 }
 
 fn check_literal(port: &PortSpec, value: &Value) -> Option<Finding> {
-    let label = cap(port.label);
+    let label = port.label;
     match port.ty {
-        PortType::Bool => require(value.is_boolean(), &label, value, "a yes/no value"),
-        PortType::Float => require(value.is_number(), &label, value, "a number"),
-        PortType::Int { min, max } => check_int(&label, value, min, max),
-        PortType::Str => require(value.is_string(), &label, value, "text"),
+        PortType::Bool => require(value.is_boolean(), label, value, "yes_no"),
+        PortType::Float => require(value.is_number(), label, value, "number"),
+        PortType::Int { min, max } => check_int(label, value, min, max),
+        PortType::Str => require(value.is_string(), label, value, "text"),
         PortType::Text => require(
             value.is_string() || value.is_object() || value.is_array(),
-            &label,
+            label,
             value,
             "text",
         ),
-        PortType::Id { allow_tag } => match value.as_str() {
-            Some(text) => check_id(&label, text, allow_tag),
-            None => Some(mismatch(&label, value, "a name like minecraft:stone")),
+        PortType::Id { allow_tag, .. } => match value.as_str() {
+            Some(text) => check_id(label, None, text, allow_tag),
+            None => mismatch(label, None, value, "name"),
         },
-        PortType::ItemStack => check_item_stack(value, &label),
-        PortType::ListOfId { allow_tag } => {
+        PortType::ItemStack => check_item_stack(value, label, None),
+        PortType::ListOfId { allow_tag, .. } => {
             let Some(items) = value.as_array() else {
-                return Some(mismatch(&label, value, "a list of names"));
+                return mismatch(label, None, value, "id_list");
             };
-            for entry in items {
-                let subject = format!("An entry in {}", port.label);
-                let finding = match entry.as_str() {
-                    Some(text) => check_id(&subject, text, allow_tag),
-                    None => Some(mismatch(
-                        &subject,
-                        entry,
-                        "a name like minecraft:oak_planks",
-                    )),
-                };
-                if finding.is_some() {
-                    return finding;
-                }
-            }
-            None
+            items.iter().find_map(|entry| match entry.as_str() {
+                Some(text) => check_id(label, Some("entry"), text, allow_tag),
+                None => mismatch(label, Some("entry"), entry, "name"),
+            })
         }
         PortType::ListOfItemStack => {
             let Some(items) = value.as_array() else {
-                return Some(mismatch(&label, value, "a list of items"));
+                return mismatch(label, None, value, "item_list");
             };
-            for entry in items {
-                let finding = check_item_stack(entry, &format!("An item in {}", port.label));
-                if finding.is_some() {
-                    return finding;
-                }
-            }
-            None
+            items
+                .iter()
+                .find_map(|entry| check_item_stack(entry, label, Some("item")))
         }
         PortType::Enum(choices) => match value.as_str() {
             Some(text) if choices.contains(&text) => None,
-            Some(text) => Some(Finding {
-                code: codes::INPUT_CONSTRAINT,
-                message: format!(
-                    "{label} is \"{text}\", which isn't one of the choices: {}.",
-                    choices.join(", ")
-                ),
-                fix: Some(format!("Use one of: {}.", choices.join(", "))),
-            }),
-            None => Some(mismatch(&label, value, "a choice")),
+            Some(text) => finding(
+                codes::INPUT_CONSTRAINT,
+                params! {
+                    "reason" => "enum",
+                    "label" => label,
+                    "value" => text,
+                    "choices" => choices.iter().map(|c| c.to_string()).collect::<Vec<_>>(),
+                },
+            ),
+            None => mismatch(label, None, value, "choice"),
         },
     }
 }
 
 /// `input-type` unless `ok`: the literal is not a value of the port's type.
-fn require(ok: bool, subject: &str, value: &Value, expected: &str) -> Option<Finding> {
+fn require(ok: bool, label: &str, value: &Value, expected: &str) -> Option<Finding> {
     if ok {
         None
     } else {
-        Some(mismatch(subject, value, expected))
+        mismatch(label, None, value, expected)
     }
 }
 
-fn mismatch(subject: &str, value: &Value, expected: &str) -> Finding {
-    Finding {
-        code: codes::INPUT_TYPE,
-        message: format!(
-            "{subject} is {}, but this step needs {expected}.",
-            describe_value(value)
-        ),
-        fix: Some(format!("Enter {expected} here.")),
-    }
+/// An `input-type` finding: the value on `label` is not of the wanted type.
+/// `scope` places it inside a list or an item when that is where it sits;
+/// `expected` is a type tag the message table turns into a phrase.
+fn mismatch(label: &str, scope: Option<&str>, value: &Value, expected: &str) -> Option<Finding> {
+    let mut p = params! {
+        "label" => label,
+        "found" => value_tag(value),
+        "expected" => expected,
+    };
+    with_scope(&mut p, scope);
+    finding(codes::INPUT_TYPE, p)
 }
 
 fn check_int(label: &str, value: &Value, min: Option<i64>, max: Option<i64>) -> Option<Finding> {
     let Some(number) = value.as_i64() else {
-        return Some(mismatch(label, value, "a whole number"));
+        return mismatch(label, None, value, "whole_number");
     };
     if let Some(low) = min
         && number < low
     {
-        return Some(Finding {
-            code: codes::INPUT_CONSTRAINT,
-            message: format!("{label} is {number}, but it can't be less than {low}."),
-            fix: Some(format!("Use {low} or more.")),
-        });
+        return finding(
+            codes::INPUT_CONSTRAINT,
+            params! { "reason" => "int_min", "label" => label, "number" => number, "min" => low },
+        );
     }
     if let Some(high) = max
         && number > high
     {
-        return Some(Finding {
-            code: codes::INPUT_CONSTRAINT,
-            message: format!("{label} is {number}, but it can't be more than {high}."),
-            fix: Some(format!("Use {high} or less.")),
-        });
+        return finding(
+            codes::INPUT_CONSTRAINT,
+            params! { "reason" => "int_max", "label" => label, "number" => number, "max" => high },
+        );
     }
     None
 }
 
-fn check_item_stack(value: &Value, subject: &str) -> Option<Finding> {
+fn check_item_stack(value: &Value, label: &str, scope: Option<&str>) -> Option<Finding> {
     let Some(object) = value.as_object() else {
-        return Some(mismatch(subject, value, "an item, like minecraft:diamond"));
+        return mismatch(label, scope, value, "item");
     };
     let Some(item) = object.get("item") else {
-        return Some(Finding {
-            code: codes::INPUT_TYPE,
-            message: format!("{subject} has no item set. An item needs at least a name."),
-            fix: Some("Give it an item name like \"minecraft:diamond\".".to_string()),
-        });
+        let mut p = params! { "reason" => "no_item", "label" => label };
+        with_scope(&mut p, scope);
+        return finding(codes::INPUT_TYPE, p);
     };
-    let item_subject = format!("{subject}'s name");
     let id_finding = match item.as_str() {
-        Some(text) => check_id(&item_subject, text, false),
-        None => Some(mismatch(
-            &item_subject,
-            item,
-            "a name like minecraft:diamond",
-        )),
+        Some(text) => check_id(label, Some("name"), text, false),
+        None => mismatch(label, Some("name"), item, "name"),
     };
     if id_finding.is_some() {
         return id_finding;
     }
-    if let Some(count) = object.get("count") {
-        match count.as_i64() {
-            Some(number) if number >= 1 => {}
-            Some(_) => {
-                return Some(Finding {
-                    code: codes::INPUT_CONSTRAINT,
-                    message: format!(
-                        "{subject} has a count below 1. You can't have less than one."
-                    ),
-                    fix: Some("Use 1 or more, or leave the count out.".to_string()),
-                });
-            }
-            None => {
-                return Some(Finding {
-                    code: codes::INPUT_TYPE,
-                    message: format!("{subject} has a count that isn't a whole number."),
-                    fix: Some("Use a whole number like 1, or leave the count out.".to_string()),
-                });
-            }
+    match object.get("count").map(Value::as_i64) {
+        None | Some(Some(1..)) => None,
+        Some(Some(_)) => {
+            let mut p = params! { "reason" => "count_below_one", "label" => label };
+            with_scope(&mut p, scope);
+            finding(codes::INPUT_CONSTRAINT, p)
+        }
+        Some(None) => {
+            let mut p = params! { "reason" => "bad_count", "label" => label };
+            with_scope(&mut p, scope);
+            finding(codes::INPUT_TYPE, p)
         }
     }
-    None
 }
 
 /// Syntax-only id check, matching `spec/types.md` section 4.5: a namespace is
 /// required, a tag prefix is allowed only where the port allows it, and the
 /// characters are the target's identifier set. Registry membership is not
 /// checked here -- it needs target data that may not exist for the registry.
-fn check_id(subject: &str, text: &str, allow_tag: bool) -> Option<Finding> {
+fn check_id(label: &str, scope: Option<&str>, text: &str, allow_tag: bool) -> Option<Finding> {
     let (is_tag, core) = match text.strip_prefix('#') {
         Some(rest) => (true, rest),
         None => (false, text),
     };
     if is_tag && !allow_tag {
-        return Some(Finding {
-            code: codes::INPUT_CONSTRAINT,
-            message: format!("{subject} is a tag, but this takes a single thing, not a tag."),
-            fix: Some("Name one thing, without the leading #.".to_string()),
-        });
+        let mut p = params! { "reason" => "id_tag_not_allowed", "label" => label };
+        with_scope(&mut p, scope);
+        return finding(codes::INPUT_CONSTRAINT, p);
     }
     match core.split_once(':') {
-        None => Some(Finding {
-            code: codes::INPUT_CONSTRAINT,
-            message: format!(
-                "\"{text}\" is missing a namespace. Minecraft names look like \"minecraft:stone\" \
-                 -- a prefix, a colon, then the name."
-            ),
-            fix: Some(format!("Try \"minecraft:{core}\".")),
-        }),
+        None => finding(
+            codes::INPUT_CONSTRAINT,
+            params! { "reason" => "id_no_namespace", "value" => text, "suggestion" => core },
+        ),
         Some((namespace, path))
             if !namespace.is_empty()
                 && !path.is_empty()
@@ -552,35 +475,29 @@ fn check_id(subject: &str, text: &str, allow_tag: bool) -> Option<Finding> {
         {
             None
         }
-        Some(_) => Some(Finding {
-            code: codes::INPUT_CONSTRAINT,
-            message: format!("\"{text}\" isn't a valid name."),
-            fix: Some(
-                "Use lower-case letters, numbers, and _ . - only, like \"minecraft:stone\"."
-                    .to_string(),
-            ),
-        }),
-    }
-}
-
-fn missing_fix(port: &PortSpec) -> String {
-    match port.ty {
-        PortType::Id { .. } | PortType::ListOfId { .. } => format!(
-            "Give this step a {}, written namespace:name (for example \"example:tick\").",
-            port.label
+        Some(_) => finding(
+            codes::INPUT_CONSTRAINT,
+            params! { "reason" => "id_bad_chars", "value" => text },
         ),
-        _ => format!("Give this step a {}.", port.label),
     }
 }
 
-fn describe_value(value: &Value) -> &'static str {
+fn with_scope(p: &mut BTreeMap<String, Param>, scope: Option<&str>) {
+    if let Some(s) = scope {
+        p.insert("scope".to_string(), Param::from(s));
+    }
+}
+
+/// A JSON value's kind as a tag the message table turns into a phrase. Keeps the
+/// English on the far side of the crate boundary.
+fn value_tag(value: &Value) -> &'static str {
     match value {
         Value::Null => "nothing",
-        Value::Bool(_) => "a yes/no value",
-        Value::Number(_) => "a number",
+        Value::Bool(_) => "yes_no",
+        Value::Number(_) => "number",
         Value::String(_) => "text",
-        Value::Array(_) => "a list",
-        Value::Object(_) => "a set of fields",
+        Value::Array(_) => "list",
+        Value::Object(_) => "group",
     }
 }
 
@@ -590,28 +507,6 @@ fn is_namespace_char(c: char) -> bool {
 
 fn is_path_char(c: char) -> bool {
     matches!(c, 'a'..='z' | '0'..='9' | '_' | '.' | '-' | '/')
-}
-
-fn cap(label: &str) -> String {
-    let mut chars = label.chars();
-    match chars.next() {
-        Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
-        None => String::new(),
-    }
-}
-
-fn join_or(names: &[&str]) -> String {
-    match names {
-        [] => "nothing".to_string(),
-        [only] => format!("\"{only}\""),
-        [head @ .., last] => format!(
-            "{} or \"{last}\"",
-            head.iter()
-                .map(|n| format!("\"{n}\""))
-                .collect::<Vec<_>>()
-                .join(", ")
-        ),
-    }
 }
 
 fn block_name(block_ref: &str) -> &str {

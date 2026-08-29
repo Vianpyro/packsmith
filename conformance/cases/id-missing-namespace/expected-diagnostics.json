@@ -4,7 +4,11 @@
     {
       "code": "input-constraint",
       "severity": "error",
-      "address": { "node": null, "slot": "root", "index": 0 },
+      "address": {
+        "node": null,
+        "slot": "root",
+        "index": 0
+      },
       "message": "\"tick\" is missing a namespace. Minecraft names look like \"minecraft:stone\" -- a prefix, a colon, then the name."
     }
   ]

@@ -196,9 +196,10 @@ fn report_diagnostics(diagnostics: &[Diagnostic]) {
             Severity::Warning => "warning",
         };
         let code = d.code.as_deref().unwrap_or("(uncoded)");
-        eprintln!("packsmith build: {severity} at {at}: {}", d.message);
+        let rendered = packsmith_compiler::message::render(d);
+        eprintln!("packsmith build: {severity} at {at}: {}", rendered.message);
         eprintln!("    [{code}]");
-        if let Some(fix) = &d.fix {
+        if let Some(fix) = &rendered.fix {
             eprintln!("    fix: {fix}");
         }
     }

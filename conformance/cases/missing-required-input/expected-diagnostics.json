@@ -4,8 +4,13 @@
     {
       "code": "input-missing",
       "severity": "error",
-      "address": { "node": null, "slot": "root", "index": 0 },
-      "message": "This step has no result item set, and it needs one."
+      "address": {
+        "node": null,
+        "slot": "root",
+        "index": 0
+      },
+      "message": "The shapeless recipe has no result item set, and it needs one.",
+      "params": { "block": "shapeless recipe", "label": "result item" }
     }
   ]
 }

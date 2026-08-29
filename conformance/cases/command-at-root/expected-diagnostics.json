@@ -4,7 +4,11 @@
     {
       "code": "slot-rejects-block",
       "severity": "error",
-      "address": { "node": null, "slot": "root", "index": 0 },
+      "address": {
+        "node": null,
+        "slot": "root",
+        "index": 0
+      },
       "message": "A command can't sit on its own at the top level -- it has to be inside a function."
     }
   ]

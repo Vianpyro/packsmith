@@ -4,8 +4,12 @@
     {
       "code": "block-unknown",
       "severity": "error",
-      "address": { "node": null, "slot": "root", "index": 0 },
-      "message": "Nothing here knows a block called \"packsmith/does-not-exist@1.0.0\"."
+      "address": {
+        "node": null,
+        "slot": "root",
+        "index": 0
+      },
+      "message": "There's no block called \"packsmith/does-not-exist@1.0.0\"."
     }
   ]
 }

@@ -310,7 +310,7 @@ and `packsmith-ir::codes` list the same codes.
 
 ## 11. Close the gaps the validation pass left open
 
-**Status.** Not started.
+**Status.** Done.
 
 **Goal.** Close three gaps opened by the validation pass before the diagnostic set grows.
 

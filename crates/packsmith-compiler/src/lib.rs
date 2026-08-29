@@ -21,7 +21,7 @@ use serde::Deserialize;
 use packsmith_blocks::{Node, lower_root};
 use packsmith_ir::{Ir, Pack, Target, Text};
 
-pub use packsmith_ir::{Diagnostic, Severity, StatementAddress};
+pub use packsmith_ir::{Diagnostic, Param, Severity, StatementAddress, message};
 pub use validate::validate;
 
 /// A graph document (`spec/graph.schema.json`). `root` is the top-level ordered

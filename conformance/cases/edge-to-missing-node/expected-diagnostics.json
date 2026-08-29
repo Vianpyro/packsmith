@@ -4,7 +4,11 @@
     {
       "code": "edge-unknown-node",
       "severity": "error",
-      "address": { "node": "fn-hello", "slot": "body", "index": 0 },
+      "address": {
+        "node": "fn-hello",
+        "slot": "body",
+        "index": 0
+      },
       "message": "A connection reads from a step called \"not-a-real-node\" that isn't in this project."
     }
   ]

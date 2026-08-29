@@ -29,6 +29,7 @@ A failure case replaces `expected/` with one file, `expected-diagnostics.json`:
   "diagnostics": [
     { "code": null, "severity": "error",
       "address": { "node": "<id>", "slot": "<name>", "index": 0 },
+      "params": { "<name>": "<value>" },
       "message": "<human text, for readers only>" }
   ]
 }
@@ -36,6 +37,10 @@ A failure case replaces `expected/` with one file, `expected-diagnostics.json`:
 
 - **Asserted:** `outcome` (and that no pack is emitted), and per diagnostic `code`,
   `severity`, and `address` (node, slot, index) — matched as an unordered set, same count.
+- **Optional:** `params`. A diagnostic carries no rendered sentence; its wording is built from
+  `code` plus `params` by one template table (`spec/diagnostics.md`). A case may pin individual
+  `params` entries — they must appear equal on a diagnostic matching on the asserted fields.
+  Pin one only when the recorded fact is the point of the case.
 - **Not asserted:** `message`. It is recorded for readability; never pin wording.
 - `code: null` marks a code the compiler does not emit yet. It stays satisfied until a real
   code replaces it, in its own commit. Do not invent the code.

@@ -125,6 +125,32 @@ fn every_failure_case_produces_its_expected_diagnostics() {
             );
         }
 
+        // Optional: a case may pin individual `params` when the fact a
+        // diagnostic records is the point of the case. Each expected `params`
+        // entry must appear, equal, on a produced diagnostic that also matches
+        // on code, severity, and address (`conformance/README.md`).
+        for expected in diagnostics {
+            let Some(want_params) = expected["params"].as_object() else {
+                continue;
+            };
+            let key = key_from_expected(expected);
+            let hit = out.diagnostics.iter().any(|d| {
+                let same_place = d.code == key.0
+                    && matches!(d.severity, Severity::Error) == (key.1 == "error")
+                    && d.address.node == key.2
+                    && d.address.slot == key.3
+                    && i64::from(d.address.index) == key.4;
+                same_place
+                    && want_params.iter().all(|(k, v)| {
+                        serde_json::to_value(d.params.get(k)).ok().as_ref() == Some(v)
+                    })
+            });
+            assert!(
+                hit,
+                "{name}: no diagnostic carries params {want_params:?} at the expected address"
+            );
+        }
+
         checked += 1;
     }
 

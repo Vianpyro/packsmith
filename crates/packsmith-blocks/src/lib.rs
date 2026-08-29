@@ -21,7 +21,14 @@ use std::collections::BTreeMap;
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
-use packsmith_ir::{Body, Command, Diagnostic, Resource, Severity, StatementAddress, codes};
+use packsmith_ir::{
+    Body, Command, Diagnostic, Param, Resource, Severity, StatementAddress, codes, params,
+};
+
+/// Minimum Minecraft target the built-ins declare support for, in each built-in
+/// manifest's `targets.min`. 26.2 is the only extracted target today; task 14
+/// adds older ones and task 15 makes the compiler intersect these ranges.
+const BUILTIN_MIN_TARGET: &str = "26.2";
 
 /// Minecraft version facts about the JSON a built-in block emits. These are shapes
 /// written from memory, which `.claude/rules/minecraft.md` forbids; they are named
@@ -52,8 +59,19 @@ pub struct Node {
 /// pass to check a graph against it before lowering. The built-ins are a fixed
 /// native set, so this is a table, not a parsed manifest; a parsed manifest
 /// replaces it when out-of-tree blocks land (Phase 3+).
+///
+/// This is a second definition of a block's ports alongside
+/// `block-manifest.schema.json`. [`BlockDescriptor::to_manifest`] serialises it
+/// into that format, and a test validates every built-in against the schema: if
+/// a built-in cannot be expressed in the form out-of-tree blocks must use, the
+/// form is wrong and we want to know now, not in Phase 3.
 #[derive(Debug, Clone, Copy)]
 pub struct BlockDescriptor {
+    /// The block's `namespace/name` id, without a version.
+    pub id: &'static str,
+    /// The block's name in game words, for the editor palette and for a
+    /// diagnostic that must name it (ADR-0009). Never the `namespace/name` id.
+    pub title: &'static str,
     pub node_kind: NodeKind,
     pub inputs: &'static [PortSpec],
     pub slots: &'static [SlotSpec],
@@ -61,6 +79,75 @@ pub struct BlockDescriptor {
     /// block; anywhere else is `slot-rejects-block`. A `packsmith/command` needs
     /// a `packsmith/function` around it.
     pub requires_parent: Option<&'static str>,
+}
+
+impl BlockDescriptor {
+    /// Serialise this descriptor into a `block-manifest.schema.json` document.
+    ///
+    /// `block_version`, `license`, and `targets` are the crate's: the built-ins
+    /// ship and are versioned with `packsmith-blocks`. `implementation` names a
+    /// declarative template that does not exist -- the built-ins lower in Rust,
+    /// and the manifest format has no native-implementation kind (the template
+    /// language itself is still unspecified, see `docs/BACKLOG.md`). The point of
+    /// this projection is the port, slot, and type shape; that is what the
+    /// schema test exercises.
+    pub fn to_manifest(&self) -> serde_json::Value {
+        let template = format!("{}.tmpl", self.id.rsplit('/').next().unwrap_or(self.id));
+        let mut manifest = Map::new();
+        manifest.insert("version".to_string(), json!(0));
+        manifest.insert("id".to_string(), json!(self.id));
+        manifest.insert(
+            "block_version".to_string(),
+            json!(env!("CARGO_PKG_VERSION")),
+        );
+        manifest.insert("license".to_string(), json!(env!("CARGO_PKG_LICENSE")));
+        manifest.insert("title".to_string(), json!(self.title));
+        manifest.insert(
+            "node_kind".to_string(),
+            json!(match self.node_kind {
+                NodeKind::Statement => "statement",
+                NodeKind::Value => "value",
+            }),
+        );
+        manifest.insert("targets".to_string(), json!({ "min": BUILTIN_MIN_TARGET }));
+
+        if !self.inputs.is_empty() {
+            let inputs: Map<String, Value> = self
+                .inputs
+                .iter()
+                .map(|port| {
+                    let mut spec = Map::new();
+                    spec.insert("type".to_string(), port.ty.to_type_ref());
+                    spec.insert("label".to_string(), json!(port.label));
+                    if !port.required {
+                        spec.insert("optional".to_string(), json!(true));
+                    }
+                    (port.name.to_string(), Value::Object(spec))
+                })
+                .collect();
+            manifest.insert("inputs".to_string(), Value::Object(inputs));
+        }
+
+        if !self.slots.is_empty() {
+            let slots: Map<String, Value> = self
+                .slots
+                .iter()
+                .map(|slot| {
+                    (
+                        slot.name.to_string(),
+                        json!({ "type": { "type": "body" }, "label": slot.label }),
+                    )
+                })
+                .collect();
+            manifest.insert("slots".to_string(), Value::Object(slots));
+        }
+
+        manifest.insert(
+            "implementation".to_string(),
+            json!({ "kind": "declarative", "template": template }),
+        );
+        Value::Object(manifest)
+    }
 }
 
 /// Whether instances of a block are statement nodes or value nodes
@@ -108,15 +195,61 @@ pub enum PortType {
     /// (ADR-0012), not by the validation pass.
     Str,
     Id {
+        /// The namespaced registry the id belongs to (`minecraft:function`).
+        /// Carried for the manifest and for the membership check that lands with
+        /// target data; the validation pass checks syntax only.
+        registry: &'static str,
         allow_tag: bool,
     },
     ItemStack,
     Text,
     ListOfId {
+        registry: &'static str,
         allow_tag: bool,
     },
     ListOfItemStack,
     Enum(&'static [&'static str]),
+}
+
+impl PortType {
+    /// This type as a `block-manifest.schema.json` type reference.
+    fn to_type_ref(self) -> serde_json::Value {
+        match self {
+            PortType::Bool => json!({ "type": "bool" }),
+            PortType::Int { min, max } => {
+                let mut m = Map::new();
+                m.insert("type".to_string(), json!("int"));
+                if let Some(min) = min {
+                    m.insert("min".to_string(), json!(min));
+                }
+                if let Some(max) = max {
+                    m.insert("max".to_string(), json!(max));
+                }
+                Value::Object(m)
+            }
+            PortType::Float => json!({ "type": "float" }),
+            PortType::Str => json!({ "type": "string" }),
+            PortType::Id {
+                registry,
+                allow_tag,
+            } => {
+                json!({ "type": "id", "registry": registry, "allow_tag": allow_tag })
+            }
+            PortType::ItemStack => json!({ "type": "item_stack" }),
+            PortType::Text => json!({ "type": "text" }),
+            PortType::ListOfId {
+                registry,
+                allow_tag,
+            } => json!({
+                "type": "list",
+                "of": { "type": "id", "registry": registry, "allow_tag": allow_tag },
+            }),
+            PortType::ListOfItemStack => {
+                json!({ "type": "list", "of": { "type": "item_stack" } })
+            }
+            PortType::Enum(choices) => json!({ "type": "enum", "choices": choices }),
+        }
+    }
 }
 
 /// The manifest-shaped view of a built-in block, or `None` when no built-in
@@ -125,11 +258,16 @@ pub enum PortType {
 pub fn describe(block_ref: &str) -> Option<BlockDescriptor> {
     Some(match block_name(block_ref) {
         "packsmith/function" => BlockDescriptor {
+            id: "packsmith/function",
+            title: "function",
             node_kind: NodeKind::Statement,
             inputs: &[PortSpec {
                 name: "name",
                 label: "name",
-                ty: PortType::Id { allow_tag: false },
+                ty: PortType::Id {
+                    registry: "minecraft:function",
+                    allow_tag: false,
+                },
                 required: true,
             }],
             slots: &[SlotSpec {
@@ -140,6 +278,8 @@ pub fn describe(block_ref: &str) -> Option<BlockDescriptor> {
             requires_parent: None,
         },
         "packsmith/command" => BlockDescriptor {
+            id: "packsmith/command",
+            title: "command",
             node_kind: NodeKind::Statement,
             inputs: &[PortSpec {
                 name: "command",
@@ -151,18 +291,26 @@ pub fn describe(block_ref: &str) -> Option<BlockDescriptor> {
             requires_parent: Some("packsmith/function"),
         },
         "packsmith/function-tag" => BlockDescriptor {
+            id: "packsmith/function-tag",
+            title: "function tag",
             node_kind: NodeKind::Statement,
             inputs: &[
                 PortSpec {
                     name: "name",
                     label: "tag name",
-                    ty: PortType::Id { allow_tag: false },
+                    ty: PortType::Id {
+                        registry: "minecraft:function",
+                        allow_tag: false,
+                    },
                     required: true,
                 },
                 PortSpec {
                     name: "functions",
                     label: "function list",
-                    ty: PortType::ListOfId { allow_tag: true },
+                    ty: PortType::ListOfId {
+                        registry: "minecraft:function",
+                        allow_tag: true,
+                    },
                     required: true,
                 },
                 PortSpec {
@@ -176,18 +324,26 @@ pub fn describe(block_ref: &str) -> Option<BlockDescriptor> {
             requires_parent: None,
         },
         "packsmith/crafting-shapeless" => BlockDescriptor {
+            id: "packsmith/crafting-shapeless",
+            title: "shapeless recipe",
             node_kind: NodeKind::Statement,
             inputs: &[
                 PortSpec {
                     name: "name",
                     label: "recipe id",
-                    ty: PortType::Id { allow_tag: false },
+                    ty: PortType::Id {
+                        registry: "minecraft:recipe",
+                        allow_tag: false,
+                    },
                     required: true,
                 },
                 PortSpec {
                     name: "ingredients",
                     label: "ingredients",
-                    ty: PortType::ListOfId { allow_tag: true },
+                    ty: PortType::ListOfId {
+                        registry: "minecraft:item",
+                        allow_tag: true,
+                    },
                     required: true,
                 },
                 PortSpec {
@@ -201,12 +357,17 @@ pub fn describe(block_ref: &str) -> Option<BlockDescriptor> {
             requires_parent: None,
         },
         "packsmith/loot-table" => BlockDescriptor {
+            id: "packsmith/loot-table",
+            title: "loot table",
             node_kind: NodeKind::Statement,
             inputs: &[
                 PortSpec {
                     name: "name",
                     label: "loot table id",
-                    ty: PortType::Id { allow_tag: false },
+                    ty: PortType::Id {
+                        registry: "minecraft:loot_table",
+                        allow_tag: false,
+                    },
                     required: true,
                 },
                 PortSpec {
@@ -221,6 +382,24 @@ pub fn describe(block_ref: &str) -> Option<BlockDescriptor> {
         },
         _ => return None,
     })
+}
+
+/// Every built-in block ref, for tests and for a future palette. Kept beside
+/// [`describe`] so a new built-in is added in one place.
+pub const BUILTIN_IDS: &[&str] = &[
+    "packsmith/function",
+    "packsmith/command",
+    "packsmith/function-tag",
+    "packsmith/crafting-shapeless",
+    "packsmith/loot-table",
+];
+
+/// The block's title (game words) for `block_ref`, or its bare `namespace/name`
+/// when it is not a built-in -- a diagnostic still needs something to call it.
+pub fn display_name(block_ref: &str) -> String {
+    describe(block_ref)
+        .map(|d| d.title.to_string())
+        .unwrap_or_else(|| block_name(block_ref).to_string())
 }
 
 /// What lowering a list of statement nodes produced: the resources they emit and
@@ -248,15 +427,19 @@ fn lower_statement(node: &Node, at: StatementAddress, out: &mut Lowered) {
         "packsmith/function-tag" => lower_function_tag(node, at, out),
         "packsmith/crafting-shapeless" => lower_crafting_shapeless(node, at, out),
         "packsmith/loot-table" => lower_loot_table(node, at, out),
-        "packsmith/command" => out.diagnostics.push(error(
+        "packsmith/command" => out.diagnostics.push(diagnostic(
             codes::SLOT_REJECTS_BLOCK,
             at,
-            "move this command into a function's body slot",
+            params! {
+                "reason" => "needs_parent",
+                "block" => display_name("packsmith/command"),
+                "parent" => display_name("packsmith/function"),
+            },
         )),
-        _ => out.diagnostics.push(error(
+        _ => out.diagnostics.push(diagnostic(
             codes::BLOCK_UNKNOWN,
             at,
-            &format!("there is no built-in block '{}'", node.block),
+            params! { "block" => node.block.clone() },
         )),
     }
 }
@@ -294,10 +477,14 @@ fn lower_command_child(
     out: &mut Lowered,
 ) {
     if block_name(&node.block) != "packsmith/command" {
-        out.diagnostics.push(error(
+        out.diagnostics.push(diagnostic(
             codes::SLOT_REJECTS_BLOCK,
             at,
-            "a function body holds command blocks",
+            params! {
+                "reason" => "not_accepted",
+                "block" => display_name(&node.block),
+                "accepts" => vec![display_name("packsmith/command")],
+            },
         ));
         return;
     }
@@ -356,10 +543,13 @@ fn lower_crafting_shapeless(node: &Node, at: StatementAddress, out: &mut Lowered
         return;
     };
     let Some(result) = node.inputs.get("result").cloned() else {
-        out.diagnostics.push(error(
+        out.diagnostics.push(diagnostic(
             codes::INPUT_MISSING,
             at,
-            "this recipe needs a 'result' item",
+            params! {
+                "block" => display_name(&node.block),
+                "label" => port_label(&node.block, "result"),
+            },
         ));
         return;
     };
@@ -438,17 +628,40 @@ fn address(node: Option<&str>, slot: &str, index: usize) -> StatementAddress {
 }
 
 /// A lowering-time diagnostic. The systematic pass in `packsmith-compiler` runs
-/// first and owns the code, wording, and fix for every condition reachable here
-/// (`spec/diagnostics.md`); this copy is a backstop for a direct `lower_root`
-/// call, so it carries the message only.
-fn error(code: &str, address: StatementAddress, message: &str) -> Diagnostic {
+/// first and owns every condition reachable here (`spec/diagnostics.md`); this
+/// copy is a backstop for a direct `lower_root` call. It carries the same code
+/// and parameters, so `packsmith_ir::message::render` words it the same way.
+fn diagnostic(
+    code: &str,
+    address: StatementAddress,
+    params: std::collections::BTreeMap<String, Param>,
+) -> Diagnostic {
     Diagnostic {
         code: Some(code.to_string()),
         severity: Severity::Error,
         address,
-        message: message.to_string(),
-        fix: None,
+        params,
     }
+}
+
+/// The `label` of `port` on `block_ref`, or the port name when it is not a
+/// built-in port.
+fn port_label(block_ref: &str, port: &str) -> String {
+    describe(block_ref)
+        .and_then(|d| d.inputs.iter().find(|p| p.name == port))
+        .map(|p| p.label.to_string())
+        .unwrap_or_else(|| port.to_string())
+}
+
+fn missing_input(node: &Node, port: &str, at: &StatementAddress, out: &mut Lowered) {
+    out.diagnostics.push(diagnostic(
+        codes::INPUT_MISSING,
+        at.clone(),
+        params! {
+            "block" => display_name(&node.block),
+            "label" => port_label(&node.block, port),
+        },
+    ));
 }
 
 fn require_str<'a>(
@@ -460,11 +673,7 @@ fn require_str<'a>(
     match node.inputs.get(port).and_then(Value::as_str) {
         Some(s) => Some(s),
         None => {
-            out.diagnostics.push(error(
-                codes::INPUT_MISSING,
-                at.clone(),
-                &format!("this block needs a '{port}' value"),
-            ));
+            missing_input(node, port, at, out);
             None
         }
     }
@@ -479,11 +688,7 @@ fn require_list(
     match node.inputs.get(port).and_then(Value::as_array) {
         Some(a) => Some(a.clone()),
         None => {
-            out.diagnostics.push(error(
-                codes::INPUT_MISSING,
-                at.clone(),
-                &format!("this block needs a '{port}' list"),
-            ));
+            missing_input(node, port, at, out);
             None
         }
     }
@@ -521,6 +726,48 @@ mod tests {
                 assert_eq!((origin.slot.as_str(), origin.index), ("body", 0));
             }
             Body::Json { .. } => panic!("a function is a commands body"),
+        }
+    }
+
+    #[test]
+    fn every_built_in_is_listed_and_describable() {
+        for id in BUILTIN_IDS {
+            let d = describe(id).unwrap_or_else(|| panic!("{id} is listed but not described"));
+            assert_eq!(d.id, *id);
+            assert!(!d.title.is_empty());
+            assert!(
+                !d.title.contains('/'),
+                "{id} title is an id, not game words"
+            );
+        }
+    }
+
+    #[test]
+    fn every_built_in_manifest_validates_against_the_schema() {
+        let schema_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../spec/block-manifest.schema.json");
+        let schema: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&schema_path).expect("read schema"))
+                .expect("schema is JSON");
+        let loc = schema["$id"].as_str().expect("schema has $id").to_string();
+
+        let mut compiler = boon::Compiler::new();
+        compiler
+            .add_resource(&loc, schema.clone())
+            .expect("add schema resource");
+        let mut schemas = boon::Schemas::new();
+        let idx = compiler
+            .compile(&loc, &mut schemas)
+            .expect("compile schema");
+
+        for id in BUILTIN_IDS {
+            let manifest = describe(id).expect("built-in").to_manifest();
+            if let Err(e) = schemas.validate(&manifest, idx) {
+                panic!(
+                    "{id} does not fit block-manifest.schema.json:\n{e}\n\nmanifest was:\n{}",
+                    serde_json::to_string_pretty(&manifest).unwrap()
+                );
+            }
         }
     }
 

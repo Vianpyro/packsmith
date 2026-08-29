@@ -14,12 +14,25 @@ graph is wrong or questionable. It carries:
 | `code` | a stable identifier for the *condition* | **yes** |
 | `severity` | `error` or `warning` | **yes** |
 | `address` | the statement address it points at, `(node, slot, index)`; `node` is `null` for the top-level `root` slot | **yes** |
-| `message` | one sentence, game terms first, file terms second | no |
-| `fix` | a concrete suggested edit, or absent when none is knowable | no |
+| `params` | the facts of this occurrence, keyed by name (see below) | optional |
 
-`message` and `fix` are the wording the two personas of ADR-0009 read. They are
-recorded but never asserted, so they can be reworded without breaking a case.
-The full `expected-diagnostics.json` rules are in `conformance/README.md`.
+A diagnostic carries **no rendered sentence**. The wording the two personas of
+ADR-0009 read — one sentence, game terms first, and a concrete `fix` when one is
+knowable — is produced from `code` and `params` by a single per-code template
+table (`packsmith-ir::message`). That table is the unit a translation replaces;
+the compiler never assembles a sentence from fragments, and capitalisation is the
+template's, never a substituted word's. The rendered wording is never asserted,
+so it can be reworded or localised without touching a case.
+
+### Parameters
+
+`params` is a flat map from a name to a string, a whole number, or a list of
+strings. The names are per condition and are not a stable contract in spec
+version 0, but a case *may* assert an individual `param` when the fact it records
+is the point of the case (a bound, a set of choices, the block a diagnostic
+names). `message` is still recorded in `expected-diagnostics.json` for a reader,
+and is still never asserted. The full `expected-diagnostics.json` rules are in
+`conformance/README.md`.
 
 ## The code namespace
 

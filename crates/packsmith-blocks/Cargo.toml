@@ -12,3 +12,10 @@ repository.workspace = true
 packsmith-ir = { path = "../packsmith-ir" }
 serde = { workspace = true }
 serde_json = { workspace = true }
+
+[dev-dependencies]
+# Validates each built-in's BlockDescriptor::to_manifest against
+# spec/block-manifest.schema.json (draft 2020-12). Test-only: nothing ships a
+# JSON Schema validator, and hand-checking a recursive oneOf/$ref schema would
+# be its own bug farm.
+boon = "0.6"

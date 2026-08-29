@@ -35,6 +35,15 @@ The format is loosely [Keep a Changelog]. Dates are the date the change landed.
   cases assert `code`, `severity`, and `address`; `message` and `fix` are recorded only. The
   `command-` codes are reserved for the command-grammar stage (ADR-0012).
 
+### Changed
+
+- `diagnostics.md`: a diagnostic no longer carries a rendered `message`/`fix`. It carries
+  `params` — a flat map to a string, whole number, or string list — and the wording is
+  produced from `code` plus `params` by one per-code template table, the unit a translation
+  replaces (ADR-0009). `expected-diagnostics.json` still records `message` for a reader and
+  still never asserts it; a case may now optionally assert an individual `param`
+  (`conformance/README.md`). No code changed and no code was added.
+
 ### Notes
 
 No format here is stable. Version 0 means Phase 0: the schemas may change in any direction

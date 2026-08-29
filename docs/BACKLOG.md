@@ -8,6 +8,14 @@ widening the scope of the task in front of you. Nothing here is committed to.
 - The declarative-block template language is referenced by `block-manifest.schema.json`
   (`implementation.kind: "declarative"`) but is not specified anywhere. It needs its own
   spec document before Phase 1 writes a template expander.
+- `block-manifest.schema.json` has no `implementation.kind` for a block that lowers in native
+  compiler code. The built-ins do, and `BlockDescriptor::to_manifest` (task 11) fills the
+  required `implementation` with a `declarative` template path that does not exist. Decide
+  whether the built-ins get real manifests + templates, or the schema grows a `native`/
+  `builtin` kind, before out-of-tree blocks make the manifest a hard contract (Phase 3).
+- `BlockDescriptor::to_manifest` hardcodes `targets.min` (`BUILTIN_MIN_TARGET = "26.2"`) and
+  `block_version` (the crate version). Task 15 (cross-block constraint resolution) is where
+  the built-ins' real supported range has to be decided; revisit then.
 - Schema validation in CI: `cargo xtask ci` should validate every conformance `input.json`
   against `spec/graph.schema.json`, and the schemas themselves against draft 2020-12.
 - The raw-mcfunction escape hatch (conformance case `raw-mcfunction`) needs a string format

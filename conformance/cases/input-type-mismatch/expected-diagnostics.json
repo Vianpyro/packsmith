@@ -4,8 +4,12 @@
     {
       "code": "input-type",
       "severity": "error",
-      "address": { "node": null, "slot": "root", "index": 0 },
-      "message": "Result item is text, but this step needs an item, like minecraft:diamond."
+      "address": {
+        "node": null,
+        "slot": "root",
+        "index": 0
+      },
+      "message": "The result item is text, but this step needs an item, like minecraft:diamond."
     }
   ]
 }

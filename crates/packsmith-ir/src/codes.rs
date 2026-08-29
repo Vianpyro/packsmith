@@ -1,8 +1,9 @@
 //! Stable identifiers for compiler diagnostics.
 //!
-//! A code names a *condition*, never a place and never a fix. It is the one part
-//! of a [`Diagnostic`](crate::Diagnostic) a machine reads: conformance cases
-//! assert on it (`.claude/rules/spec.md`), and it never changes once shipped.
+//! A code names a *condition*, never a place and never a fix. With the
+//! [`Diagnostic`](crate::Diagnostic)'s `params` it is what a machine reads:
+//! conformance cases assert on it (`.claude/rules/spec.md`), the message table
+//! ([`crate::message`]) keys off it, and it never changes once shipped.
 //! `spec/diagnostics.md` is the normative list; this module is its Rust mirror
 //! and the two are kept in step.
 //!

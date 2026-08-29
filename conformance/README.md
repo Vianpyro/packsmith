@@ -39,6 +39,7 @@ case replaces `expected/` with a single file, `expected-diagnostics.json`:
       "code": null,
       "severity": "error",
       "address": { "node": "fn-legacy", "slot": "body", "index": 0 },
+      "params": { "from": "1.16" },
       "message": "execute no longer takes a bare selector and position; write `execute as <targets> at @s run <command>`"
     }
   ]
@@ -55,11 +56,21 @@ The runner matches the produced diagnostics to the expected ones as sets: same c
 expected diagnostic paired with a distinct produced one on the compared fields. Order is not
 significant.
 
+**Optional — `params`:**
+
+A diagnostic carries no rendered sentence: its wording comes from a per-code template table
+fed by `params`, a flat map from a name to a string, a whole number, or a list of strings
+(`spec/diagnostics.md`). A case *may* include a `params` object on an expected diagnostic; when
+it does, every entry must appear, equal, on a produced diagnostic that also matches on `code`,
+`severity`, and `address`. Extra params the compiler produced are ignored. Pin a `param` only
+when the fact it records is the point of the case — a bound, a set of choices, the block a
+diagnostic names.
+
 **Not compared:**
 
 - `message` — recorded in the file so a reader can see what the diagnostic says, never
   asserted. Pinning wording turns every rephrasing into a test failure, and the message is the
-  part most likely to improve.
+  part most likely to improve. Assert a `param` instead when a specific fact matters.
 
 **Pending code:** `code: null` means the diagnostic code is not yet pinned because the
 compiler does not emit it yet. The runner still checks `outcome`, `severity`, and `address`;
