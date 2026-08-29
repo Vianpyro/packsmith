@@ -324,7 +324,11 @@ mod tests {
     }
 
     #[test]
-    fn the_real_suite_still_has_at_least_one_placeholder_and_one_verified_case() {
+    fn the_real_suite_has_at_least_one_verified_case() {
+        // Guards against the suite silently checking nothing: if every case were
+        // a placeholder, `run_verified_cases` would build and diff none of them
+        // yet still report success. The placeholder/verifiable split itself is
+        // covered by `placeholder_cases_count_as_skipped_not_verifiable`.
         let cases = crate::repo_root().join("conformance/cases");
         let names: Vec<String> = std::fs::read_dir(&cases)
             .unwrap()
@@ -332,9 +336,11 @@ mod tests {
             .filter(|e| e.path().is_dir())
             .map(|e| e.file_name().to_string_lossy().into_owned())
             .collect();
-        let (verifiable, skipped) = partition_cases(&names, &cases);
-        assert!(!verifiable.is_empty(), "empty-pack should be verifiable");
-        assert!(skipped > 0, "the stubbed cases should be skipped");
+        let (verifiable, _skipped) = partition_cases(&names, &cases);
+        assert!(
+            !verifiable.is_empty(),
+            "no conformance case has a verified expected/ tree"
+        );
     }
 
     #[test]
