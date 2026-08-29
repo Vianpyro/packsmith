@@ -6,6 +6,15 @@
             "detail": "Compile every conformance/cases/*/input.json to target/datapacks/<case>.zip. Copy those into a world's datapacks/ folder to test in game. Failure cases (no expected/ tree) are expected to error and are skipped.",
             "type": "shell",
             "command": "$out = 'target/datapacks'; New-Item -ItemType Directory -Force -Path $out | Out-Null; Get-ChildItem conformance/cases -Directory | ForEach-Object { Write-Host \"--- $($_.Name)\"; cargo run -q -p packsmith-cli -- build \"$($_.FullName)/input.json\" --target 26.2 --output \"$out/$($_.Name).zip\" }",
+            "options": {
+                "shell": {
+                    "executable": "powershell.exe",
+                    "args": [
+                        "-NoProfile",
+                        "-Command"
+                    ]
+                }
+            },
             "problemMatcher": "$rustc",
             "presentation": {
                 "clear": true
