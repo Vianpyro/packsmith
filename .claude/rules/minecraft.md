@@ -38,6 +38,14 @@ types).
 Never vendor: the vanilla data pack, assets, textures, sounds, language files, loot tables,
 worldgen configurations. This is both a repository-size rule and a licensing rule (ADR-0015).
 
+Decompiled or deobfuscated Minecraft source must never enter the working tree, even locally
+and even when ignored by git. Since 26.1 Snapshot 1 the game ships deobfuscated, so decompiling
+is easy and the temptation is real, but the code is Mojang's and the EULA is unchanged.
+Transcribing from it would put code we cannot license under our AGPL grant and would taint the
+contributor who read it. ADR-0012 and ADR-0019 already give us officially generated
+descriptions of the same grammar and shapes, and ADR-0017 gives us the actual runtime, so
+decompilation would supply less than what we have at a cost we cannot pay.
+
 Every generated file carries `SPDX-License-Identifier: LicenseRef-Minecraft-Derived` and a
 provenance header: source URL, upstream commit SHA, mcmeta version id, extraction date, input
 hash. CI re-runs the extractor and requires byte-identical output.

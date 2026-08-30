@@ -60,3 +60,7 @@ widening the scope of the task in front of you. Nothing here is committed to.
   pack model is open: `test_instance` and `test_environment` are registry categories like any
   other, so supporting them is target data plus conformance cases, not a change to
   `packsmith-ir` or `packsmith-compiler`. Noted in ADR-0017.
+- A trace-level debugger. A debug build injects a marker before each statement, runs under the
+  ADR-0017 GameTest harness, and maps captured output back to graph nodes through the
+  `StatementAddress` already carried on every IR resource. Unscheduled. The limit: tracing and
+  replay, not breakpoints -- pausing would need a mod.
