@@ -349,7 +349,10 @@ diagnostic code.
 
 ## 12. Command grammar validation
 
-**Status.** In progress.
+**Status.** Done — the 🔒 in-game check was carried out by the maintainer: `one-function`
+and `raw-mcfunction` loaded in Java Edition 26.2 with no compatibility warning and their
+functions ran (`example:hello` prints "Hello, world!", `example:raw_notes` runs both `say`
+lines with the comment and blank line ignored).
 
 **Goal.** Validate every command string against the target's extracted Brigadier tree, as a
 compiler stage with real diagnostics — the last Phase 1 code work.
