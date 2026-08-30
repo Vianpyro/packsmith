@@ -13,7 +13,7 @@ name = "packsmith"
 path = "src/main.rs"
 
 [dependencies]
-packsmith-compiler = { path = "../packsmith-compiler" }
-packsmith-emit = { path = "../packsmith-emit" }
-packsmith-mcversion = { path = "../packsmith-mcversion" }
+packsmith-compiler = { workspace = true }
+packsmith-emit = { workspace = true }
+packsmith-mcversion = { workspace = true }
 serde_json = { workspace = true }

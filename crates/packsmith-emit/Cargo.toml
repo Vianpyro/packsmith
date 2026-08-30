@@ -9,8 +9,8 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-packsmith-ir = { path = "../packsmith-ir" }
-packsmith-mcversion = { path = "../packsmith-mcversion" }
+packsmith-ir = { workspace = true }
+packsmith-mcversion = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

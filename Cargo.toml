@@ -25,6 +25,11 @@ repository = "https://github.com/Vianpyro/packsmith"
 # or writer. thiserror: the typed-error convention for libraries. anyhow: CLI
 # and xtask only.
 [workspace.dependencies]
+packsmith-ir = { path = "crates/packsmith-ir", version = "0.1.0" }
+packsmith-mcversion = { path = "crates/packsmith-mcversion", version = "0.1.0" }
+packsmith-compiler = { path = "crates/packsmith-compiler", version = "0.1.0" }
+packsmith-emit = { path = "crates/packsmith-emit", version = "0.1.0" }
+packsmith-blocks = { path = "crates/packsmith-blocks", version = "0.1.0" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
